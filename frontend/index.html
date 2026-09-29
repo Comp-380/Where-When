@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Portal - Sign Up & Sign In</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="background-decorations">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+  </div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+        </div>
+        <span class="brand-name">SecureAuth</span>
+      </div>
+      <div class="system-status">
+        <span class="status-indicator"></span>
+        <span class="status-text">FastAPI + SQLite Active</span>
+      </div>
+    </header>
+
+    <!-- Notification Toast System -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Auth Card (Signup & Login) -->
+    <main id="auth-section" class="auth-card">
+      <!-- Tab Navigation -->
+      <div class="tabs-nav" role="tablist">
+        <button id="tab-signup-btn" class="tab-btn active" role="tab" aria-selected="true">
+          Create Account
+        </button>
+        <button id="tab-login-btn" class="tab-btn" role="tab" aria-selected="false">
+          Sign In
+        </button>
+      </div>
+
+      <!-- SIGNUP VIEW -->
+      <section id="signup-view" class="view-panel active">
+        <div class="panel-header">
+          <h2>Get started in seconds</h2>
+          <p>Create your secure account. Your password will be encrypted with bcrypt and stored in SQLite.</p>
+        </div>
+
+        <form id="signup-form" novalidate>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="su-username">Username <span class="req">*</span></label>
+              <div class="input-wrapper">
+                <input
+                  type="text"
+                  id="su-username"
+                  name="username"
+                  placeholder="e.g. alex_coder"
+                  autocomplete="username"
+                  required
+                >
+                <span class="input-validation-icon" id="val-icon-username"></span>
+              </div>
+              <small class="field-hint">3-30 letters, numbers, hyphens or underscores</small>
+            </div>
+
+            <div class="form-group">
+              <label for="su-fullname">Full Name</label>
+              <div class="input-wrapper">
+                <input
+                  type="text"
+                  id="su-fullname"
+                  name="full_name"
+                  placeholder="e.g. Alex Rivera"
+                  autocomplete="name"
+                >
+              </div>
+              <small class="field-hint">Optional display name</small>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="su-email">Email Address <span class="req">*</span></label>
+            <div class="input-wrapper">
+              <input
+                type="email"
+                id="su-email"
+                name="email"
+                placeholder="alex@example.com"
+                autocomplete="email"
+                required
+              >
+              <span class="input-validation-icon" id="val-icon-email"></span>
+            </div>
+            <small class="field-hint">Must be a valid email format</small>
+          </div>
+
+          <div class="form-group">
+            <label for="su-password">Password <span class="req">*</span></label>
+            <div class="input-wrapper">
+              <input
+                type="password"
+                id="su-password"
+                name="password"
+                placeholder="Enter strong password"
+                autocomplete="new-password"
+                required
+              >
+              <button type="button" class="toggle-password" data-target="su-password" aria-label="Toggle password visibility">
+                <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <svg class="eye-closed hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m15 18-.722-3.25"/>
+                  <path d="M2 8a10.645 10.645 0 0 0 20 0"/>
+                  <path d="m20 15-1.726-2.05"/>
+                  <path d="m4 15 1.726-2.05"/>
+                  <path d="m9 18 .722-3.25"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Password Strength Indicator -->
+            <div class="password-meter-container">
+              <div class="meter-bar-track">
+                <div id="password-meter-fill" class="meter-bar-fill"></div>
+              </div>
+              <div class="meter-label-row">
+                <span>Strength:</span>
+                <span id="password-strength-text" class="strength-text">Too short</span>
+              </div>
+            </div>
+
+            <!-- Password Requirements Checklist -->
+            <ul class="pwd-requirements" id="pwd-requirements-list">
+              <li id="req-len" class="req-item">
+                <span class="req-bullet">✕</span> At least 8 characters
+              </li>
+              <li id="req-upper" class="req-item">
+                <span class="req-bullet">✕</span> One uppercase letter (A-Z)
+              </li>
+              <li id="req-lower" class="req-item">
+                <span class="req-bullet">✕</span> One lowercase letter (a-z)
+              </li>
+              <li id="req-num" class="req-item">
+                <span class="req-bullet">✕</span> One number (0-9)
+              </li>
+              <li id="req-special" class="req-item">
+                <span class="req-bullet">✕</span> One special symbol (!@#$%^&*)
+              </li>
+            </ul>
+          </div>
+
+          <div class="form-group">
+            <label for="su-confirm-password">Confirm Password <span class="req">*</span></label>
+            <div class="input-wrapper">
+              <input
+                type="password"
+                id="su-confirm-password"
+                name="confirm_password"
+                placeholder="Re-enter your password"
+                autocomplete="new-password"
+                required
+              >
+              <button type="button" class="toggle-password" data-target="su-confirm-password" aria-label="Toggle password visibility">
+                <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <svg class="eye-closed hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m15 18-.722-3.25"/>
+                  <path d="M2 8a10.645 10.645 0 0 0 20 0"/>
+                  <path d="m20 15-1.726-2.05"/>
+                  <path d="m4 15 1.726-2.05"/>
+                  <path d="m9 18 .722-3.25"/>
+                </svg>
+              </button>
+            </div>
+            <small id="confirm-match-hint" class="field-hint"></small>
+          </div>
+
+          <div class="form-terms">
+            <label class="checkbox-container">
+              <input type="checkbox" id="su-terms" required>
+              <span class="custom-checkbox"></span>
+              <span class="terms-label">I agree to the <a href="#terms">Terms of Service</a> & <a href="#privacy">Privacy Policy</a></span>
+            </label>
+          </div>
+
+          <button type="submit" id="btn-signup" class="btn-primary">
+            <span class="btn-text">Create Account</span>
+            <div class="spinner hidden"></div>
+          </button>
+        </form>
+
+        <div class="panel-footer">
+          <span>Already registered?</span>
+          <button type="button" class="link-btn" id="link-to-login">Sign in here</button>
+        </div>
+      </section>
+
+      <!-- LOGIN VIEW -->
+      <section id="login-view" class="view-panel">
+        <div class="panel-header">
+          <h2>Welcome back</h2>
+          <p>Sign in to your account with your email or username.</p>
+        </div>
+
+        <form id="login-form" novalidate>
+          <div class="form-group">
+            <label for="li-identifier">Username or Email <span class="req">*</span></label>
+            <div class="input-wrapper">
+              <input
+                type="text"
+                id="li-identifier"
+                name="identifier"
+                placeholder="alex_coder or alex@example.com"
+                autocomplete="username"
+                required
+              >
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="li-password">Password <span class="req">*</span></label>
+            <div class="input-wrapper">
+              <input
+                type="password"
+                id="li-password"
+                name="password"
+                placeholder="Enter your password"
+                autocomplete="current-password"
+                required
+              >
+              <button type="button" class="toggle-password" data-target="li-password" aria-label="Toggle password visibility">
+                <svg class="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <svg class="eye-closed hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m15 18-.722-3.25"/>
+                  <path d="M2 8a10.645 10.645 0 0 0 20 0"/>
+                  <path d="m20 15-1.726-2.05"/>
+                  <path d="m4 15 1.726-2.05"/>
+                  <path d="m9 18 .722-3.25"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" id="btn-login" class="btn-primary">
+            <span class="btn-text">Sign In</span>
+            <div class="spinner hidden"></div>
+          </button>
+        </form>
+
+        <div class="panel-footer">
+          <span>Don't have an account yet?</span>
+          <button type="button" class="link-btn" id="link-to-signup">Sign up now</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- DASHBOARD VIEW (Shown after authentication) -->
+    <main id="dashboard-section" class="dashboard-card hidden">
+      <div class="dashboard-header">
+        <div class="user-greeting">
+          <div class="avatar-circle" id="dash-avatar">U</div>
+          <div>
+            <h2 id="dash-greeting-name">Welcome!</h2>
+            <p id="dash-greeting-handle" class="user-handle">@username</p>
+          </div>
+        </div>
+        <button id="btn-logout" class="btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" x2="9" y1="12" y2="12"/>
+          </svg>
+          Sign Out
+        </button>
+      </div>
+
+      <div class="dashboard-grid">
+        <!-- User Profile Info -->
+        <div class="info-card">
+          <div class="card-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            Account Details
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">User ID:</span>
+            <span class="detail-value" id="dash-id">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Username:</span>
+            <span class="detail-value" id="dash-username">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Email:</span>
+            <span class="detail-value" id="dash-email">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Full Name:</span>
+            <span class="detail-value" id="dash-fullname">Not provided</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Joined:</span>
+            <span class="detail-value" id="dash-joined">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Status:</span>
+            <span class="badge badge-success" id="dash-status">Active</span>
+          </div>
+        </div>
+
+        <!-- Security & Architecture Info -->
+        <div class="info-card">
+          <div class="card-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            Security & Session
+          </div>
+          <div class="security-badges">
+            <div class="security-item">
+              <span class="sec-dot green"></span>
+              <div>
+                <strong>Bcrypt Password Hashing</strong>
+                <p>12 salt rounds, one-way hash</p>
+              </div>
+            </div>
+            <div class="security-item">
+              <span class="sec-dot green"></span>
+              <div>
+                <strong>JWT Session Active</strong>
+                <p>HMAC-SHA256 signature with 24h validity</p>
+              </div>
+            </div>
+            <div class="security-item">
+              <span class="sec-dot green"></span>
+              <div>
+                <strong>SQLite Database</strong>
+                <p>ACID-compliant relational storage</p>
+              </div>
+            </div>
+          </div>
+          <div class="api-links">
+            <a href="/docs" target="_blank" class="api-link-btn">
+              <span>View Swagger API Docs</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" x2="21" y1="14" y2="3"/>
+              </svg>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Database Users Table -->
+      <div class="db-section">
+        <div class="db-section-header">
+          <div>
+            <h3>Registered Database Users</h3>
+            <p>Live data fetched from SQLite database (`users` table)</p>
+          </div>
+          <button id="btn-refresh-users" class="btn-refresh" title="Refresh user list">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+              <path d="M21 3v5h-5"/>
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+              <path d="M8 16H3v5"/>
+            </svg>
+            Refresh
+          </button>
+        </div>
+        <div class="table-container">
+          <table class="db-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Display Name</th>
+                <th>Created At</th>
+              </tr>
+            </thead>
+            <tbody id="db-users-tbody">
+              <tr>
+                <td colspan="5" class="table-loading">Loading users...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

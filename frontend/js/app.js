@@ -1,0 +1,514 @@
+// State Management
+const state = {
+  token: localStorage.getItem("token") || null,
+  currentUser: null,
+};
+
+// DOM Elements
+const authSection = document.getElementById("auth-section");
+const dashboardSection = document.getElementById("dashboard-section");
+const tabSignupBtn = document.getElementById("tab-signup-btn");
+const tabLoginBtn = document.getElementById("tab-login-btn");
+const signupView = document.getElementById("signup-view");
+const loginView = document.getElementById("login-view");
+const linkToLogin = document.getElementById("link-to-login");
+const linkToSignup = document.getElementById("link-to-signup");
+
+// Signup Form Elements
+const signupForm = document.getElementById("signup-form");
+const suUsername = document.getElementById("su-username");
+const suEmail = document.getElementById("su-email");
+const suFullName = document.getElementById("su-fullname");
+const suPassword = document.getElementById("su-password");
+const suConfirmPassword = document.getElementById("su-confirm-password");
+const suTerms = document.getElementById("su-terms");
+const btnSignup = document.getElementById("btn-signup");
+const valIconUsername = document.getElementById("val-icon-username");
+const valIconEmail = document.getElementById("val-icon-email");
+const confirmMatchHint = document.getElementById("confirm-match-hint");
+
+// Password Meter & Requirements Elements
+const passwordMeterFill = document.getElementById("password-meter-fill");
+const passwordStrengthText = document.getElementById("password-strength-text");
+const reqLen = document.getElementById("req-len");
+const reqUpper = document.getElementById("req-upper");
+const reqLower = document.getElementById("req-lower");
+const reqNum = document.getElementById("req-num");
+const reqSpecial = document.getElementById("req-special");
+
+// Login Form Elements
+const loginForm = document.getElementById("login-form");
+const liIdentifier = document.getElementById("li-identifier");
+const liPassword = document.getElementById("li-password");
+const btnLogin = document.getElementById("btn-login");
+
+// Dashboard Elements
+const dashAvatar = document.getElementById("dash-avatar");
+const dashGreetingName = document.getElementById("dash-greeting-name");
+const dashGreetingHandle = document.getElementById("dash-greeting-handle");
+const dashId = document.getElementById("dash-id");
+const dashUsername = document.getElementById("dash-username");
+const dashEmail = document.getElementById("dash-email");
+const dashFullname = document.getElementById("dash-fullname");
+const dashJoined = document.getElementById("dash-joined");
+const dbUsersTbody = document.getElementById("db-users-tbody");
+const btnRefreshUsers = document.getElementById("btn-refresh-users");
+const btnLogout = document.getElementById("btn-logout");
+const toastContainer = document.getElementById("toast-container");
+
+// Toast Notification Utility
+function showToast(message, type = "info", duration = 4000) {
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateX(40px)";
+    toast.style.transition = "all 0.3s ease";
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+// Tab Switching
+function switchTab(target) {
+  if (target === "signup") {
+    tabSignupBtn.classList.add("active");
+    tabSignupBtn.setAttribute("aria-selected", "true");
+    tabLoginBtn.classList.remove("active");
+    tabLoginBtn.setAttribute("aria-selected", "false");
+    signupView.classList.add("active");
+    loginView.classList.remove("active");
+  } else {
+    tabLoginBtn.classList.add("active");
+    tabLoginBtn.setAttribute("aria-selected", "true");
+    tabSignupBtn.classList.remove("active");
+    tabSignupBtn.setAttribute("aria-selected", "false");
+    loginView.classList.add("active");
+    signupView.classList.remove("active");
+  }
+}
+
+tabSignupBtn.addEventListener("click", () => switchTab("signup"));
+tabLoginBtn.addEventListener("click", () => switchTab("login"));
+linkToLogin.addEventListener("click", () => switchTab("login"));
+linkToSignup.addEventListener("click", () => switchTab("signup"));
+
+// Password Visibility Toggles
+document.querySelectorAll(".toggle-password").forEach((button) => {
+  button.addEventListener("click", () => {
+    const targetId = button.getAttribute("data-target");
+    const input = document.getElementById(targetId);
+    const eyeOpen = button.querySelector(".eye-open");
+    const eyeClosed = button.querySelector(".eye-closed");
+
+    if (input.type === "password") {
+      input.type = "text";
+      eyeOpen.classList.add("hidden");
+      eyeClosed.classList.remove("hidden");
+    } else {
+      input.type = "password";
+      eyeOpen.classList.remove("hidden");
+      eyeClosed.classList.add("hidden");
+    }
+  });
+});
+
+// Live Form Validation Logic
+function validateUsername(value) {
+  const clean = value.trim();
+  const valid = /^[a-zA-Z0-9_-]{3,30}$/.test(clean);
+  if (!clean) {
+    suUsername.classList.remove("valid-input", "invalid-input");
+    valIconUsername.textContent = "";
+    return false;
+  }
+  if (valid) {
+    suUsername.classList.add("valid-input");
+    suUsername.classList.remove("invalid-input");
+    valIconUsername.textContent = "✓";
+    valIconUsername.style.color = "#10b981";
+  } else {
+    suUsername.classList.add("invalid-input");
+    suUsername.classList.remove("valid-input");
+    valIconUsername.textContent = "✕";
+    valIconUsername.style.color = "#ef4444";
+  }
+  return valid;
+}
+
+function validateEmail(value) {
+  const clean = value.trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const valid = emailRegex.test(clean);
+  if (!clean) {
+    suEmail.classList.remove("valid-input", "invalid-input");
+    valIconEmail.textContent = "";
+    return false;
+  }
+  if (valid) {
+    suEmail.classList.add("valid-input");
+    suEmail.classList.remove("invalid-input");
+    valIconEmail.textContent = "✓";
+    valIconEmail.style.color = "#10b981";
+  } else {
+    suEmail.classList.add("invalid-input");
+    suEmail.classList.remove("valid-input");
+    valIconEmail.textContent = "✕";
+    valIconEmail.style.color = "#ef4444";
+  }
+  return valid;
+}
+
+function evaluatePassword(pwd) {
+  const hasLen = pwd.length >= 8;
+  const hasUpper = /[A-Z]/.test(pwd);
+  const hasLower = /[a-z]/.test(pwd);
+  const hasNum = /\d/.test(pwd);
+  const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(pwd);
+
+  // Update checkmarks
+  updateReqItem(reqLen, hasLen);
+  updateReqItem(reqUpper, hasUpper);
+  updateReqItem(reqLower, hasLower);
+  updateReqItem(reqNum, hasNum);
+  updateReqItem(reqSpecial, hasSpecial);
+
+  // Calculate score (0 to 5)
+  const checks = [hasLen, hasUpper, hasLower, hasNum, hasSpecial];
+  const passedCount = checks.filter(Boolean).length;
+
+  let width = "0%";
+  let color = "#ef4444";
+  let label = "Too short";
+
+  if (pwd.length === 0) {
+    width = "0%";
+    label = "Too short";
+  } else if (passedCount <= 2) {
+    width = "25%";
+    color = "#ef4444";
+    label = "Weak";
+  } else if (passedCount === 3) {
+    width = "50%";
+    color = "#f59e0b";
+    label = "Fair";
+  } else if (passedCount === 4) {
+    width = "75%";
+    color = "#3b82f6";
+    label = "Good";
+  } else if (passedCount === 5) {
+    width = "100%";
+    color = "#10b981";
+    label = "Strong";
+  }
+
+  passwordMeterFill.style.width = width;
+  passwordMeterFill.style.backgroundColor = color;
+  passwordStrengthText.textContent = label;
+  passwordStrengthText.style.color = color;
+
+  return passedCount === 5;
+}
+
+function updateReqItem(element, isMet) {
+  const bullet = element.querySelector(".req-bullet");
+  if (isMet) {
+    element.classList.add("met");
+    bullet.textContent = "✓";
+  } else {
+    element.classList.remove("met");
+    bullet.textContent = "✕";
+  }
+}
+
+function checkPasswordMatch() {
+  const pwd = suPassword.value;
+  const confirm = suConfirmPassword.value;
+
+  if (!confirm) {
+    confirmMatchHint.textContent = "";
+    confirmMatchHint.className = "field-hint";
+    suConfirmPassword.classList.remove("valid-input", "invalid-input");
+    return false;
+  }
+
+  if (pwd === confirm) {
+    confirmMatchHint.textContent = "✓ Passwords match";
+    confirmMatchHint.className = "field-hint success";
+    suConfirmPassword.classList.add("valid-input");
+    suConfirmPassword.classList.remove("invalid-input");
+    return true;
+  } else {
+    confirmMatchHint.textContent = "✕ Passwords do not match";
+    confirmMatchHint.className = "field-hint error";
+    suConfirmPassword.classList.add("invalid-input");
+    suConfirmPassword.classList.remove("valid-input");
+    return false;
+  }
+}
+
+// Event Listeners for Live Form Feedback
+suUsername.addEventListener("input", (e) => validateUsername(e.target.value));
+suEmail.addEventListener("input", (e) => validateEmail(e.target.value));
+suPassword.addEventListener("input", (e) => {
+  evaluatePassword(e.target.value);
+  if (suConfirmPassword.value) checkPasswordMatch();
+});
+suConfirmPassword.addEventListener("input", checkPasswordMatch);
+
+// Signup Form Submit
+signupForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const username = suUsername.value.trim();
+  const email = suEmail.value.trim();
+  const fullName = suFullName.value.trim() || null;
+  const password = suPassword.value;
+  const confirmPassword = suConfirmPassword.value;
+
+  // Validate fields
+  if (!validateUsername(username)) {
+    showToast("Please enter a valid username (3-30 chars, alphanumeric).", "error");
+    suUsername.focus();
+    return;
+  }
+  if (!validateEmail(email)) {
+    showToast("Please enter a valid email address.", "error");
+    suEmail.focus();
+    return;
+  }
+  if (!evaluatePassword(password)) {
+    showToast("Please ensure password satisfies all strength criteria.", "error");
+    suPassword.focus();
+    return;
+  }
+  if (password !== confirmPassword) {
+    showToast("Passwords do not match.", "error");
+    suConfirmPassword.focus();
+    return;
+  }
+  if (!suTerms.checked) {
+    showToast("Please agree to the Terms of Service to continue.", "error");
+    return;
+  }
+
+  setButtonLoading(btnSignup, true);
+
+  try {
+    const response = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username,
+        email,
+        full_name: fullName,
+        password,
+        confirm_password: confirmPassword,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const errMsg = Array.isArray(data.detail)
+        ? data.detail.map((d) => d.msg).join(", ")
+        : data.detail || "Registration failed.";
+      throw new Error(errMsg);
+    }
+
+    // Success
+    showToast("Account created successfully! Welcome aboard.", "success");
+    handleAuthSuccess(data);
+    signupForm.reset();
+    evaluatePassword("");
+  } catch (err) {
+    showToast(err.message, "error");
+  } finally {
+    setButtonLoading(btnSignup, false);
+  }
+});
+
+// Login Form Submit
+loginForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const identifier = liIdentifier.value.trim();
+  const password = liPassword.value;
+
+  if (!identifier) {
+    showToast("Please enter your username or email.", "error");
+    liIdentifier.focus();
+    return;
+  }
+  if (!password) {
+    showToast("Please enter your password.", "error");
+    liPassword.focus();
+    return;
+  }
+
+  setButtonLoading(btnLogin, true);
+
+  try {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier, password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Login failed.");
+    }
+
+    showToast("Signed in successfully!", "success");
+    handleAuthSuccess(data);
+    loginForm.reset();
+  } catch (err) {
+    showToast(err.message, "error");
+  } finally {
+    setButtonLoading(btnLogin, false);
+  }
+});
+
+// Handle Successful Authentication
+function handleAuthSuccess(authData) {
+  state.token = authData.access_token;
+  state.currentUser = authData.user;
+  localStorage.setItem("token", authData.access_token);
+  renderDashboard(authData.user);
+  loadDatabaseUsers();
+}
+
+// Dashboard Rendering
+function renderDashboard(user) {
+  authSection.classList.add("hidden");
+  dashboardSection.classList.remove("hidden");
+
+  const displayName = user.full_name || user.username;
+  dashAvatar.textContent = (displayName[0] || "U").toUpperCase();
+  dashGreetingName.textContent = `Welcome, ${displayName}!`;
+  dashGreetingHandle.textContent = `@${user.username}`;
+
+  dashId.textContent = `#${user.id}`;
+  dashUsername.textContent = user.username;
+  dashEmail.textContent = user.email;
+  dashFullname.textContent = user.full_name || "Not provided";
+
+  const dateObj = new Date(user.created_at);
+  dashJoined.textContent = dateObj.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// Fetch all registered users from SQLite database
+async function loadDatabaseUsers() {
+  dbUsersTbody.innerHTML = `<tr><td colspan="5" class="table-loading">Loading users from SQLite...</td></tr>`;
+
+  try {
+    const response = await fetch("/api/users");
+    if (!response.ok) throw new Error("Failed to fetch database users");
+    const users = await response.json();
+
+    if (users.length === 0) {
+      dbUsersTbody.innerHTML = `<tr><td colspan="5" class="table-loading">No users found in database.</td></tr>`;
+      return;
+    }
+
+    dbUsersTbody.innerHTML = users
+      .map((u) => {
+        const d = new Date(u.created_at);
+        const formatted = d.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        return `
+        <tr>
+          <td><strong>#${u.id}</strong></td>
+          <td>@${escapeHtml(u.username)}</td>
+          <td>${escapeHtml(u.email)}</td>
+          <td>${escapeHtml(u.full_name || "—")}</td>
+          <td>${formatted}</td>
+        </tr>
+      `;
+      })
+      .join("");
+  } catch (err) {
+    dbUsersTbody.innerHTML = `<tr><td colspan="5" class="table-loading" style="color: #f87171;">Error loading users from database</td></tr>`;
+  }
+}
+
+btnRefreshUsers.addEventListener("click", loadDatabaseUsers);
+
+// Logout Handler
+btnLogout.addEventListener("click", () => {
+  state.token = null;
+  state.currentUser = null;
+  localStorage.removeItem("token");
+  dashboardSection.classList.add("hidden");
+  authSection.classList.remove("hidden");
+  switchTab("signup");
+  showToast("You have been signed out.", "info");
+});
+
+// Helper: Button Loading State
+function setButtonLoading(button, isLoading) {
+  const textSpan = button.querySelector(".btn-text");
+  const spinner = button.querySelector(".spinner");
+  if (isLoading) {
+    button.disabled = true;
+    textSpan.classList.add("hidden");
+    spinner.classList.remove("hidden");
+  } else {
+    button.disabled = false;
+    textSpan.classList.remove("hidden");
+    spinner.classList.add("hidden");
+  }
+}
+
+// Helper: HTML escaping
+function escapeHtml(str) {
+  if (!str) return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// Initial Session Check
+async function checkExistingSession() {
+  if (!state.token) return;
+
+  try {
+    const response = await fetch("/api/auth/me", {
+      headers: {
+        Authorization: `Bearer ${state.token}`,
+      },
+    });
+
+    if (response.ok) {
+      const user = await response.json();
+      state.currentUser = user;
+      renderDashboard(user);
+      loadDatabaseUsers();
+    } else {
+      localStorage.removeItem("token");
+      state.token = null;
+    }
+  } catch (e) {
+    // Network or server issue, stay on login/signup
+  }
+}
+
+// Start app
+checkExistingSession();
