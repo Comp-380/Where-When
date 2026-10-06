@@ -55,11 +55,21 @@ A modern, full-stack user registration and authentication web application built 
 
 ## 🚀 Quickstart
 
-### 1. Activate Virtual Environment
+### 1. Create Virtual Environment
 
-- **Bash / Zsh**:
+```bash
+python3 -m venv .venv
+```
+
+### 2. Activate Virtual Environment
+
+- **macOS / Linux (Bash / Zsh)**:
   ```bash
   source .venv/bin/activate
+  ```
+- **Windows (Command Prompt / PowerShell)**:
+  ```powershell
+  .venv\Scripts\activate
   ```
 - **Fish Shell**:
   ```fish
@@ -68,7 +78,13 @@ A modern, full-stack user registration and authentication web application built 
 
 *(Or simply run scripts directly without activation using `./.venv/bin/python`)*
 
-### 2. Start the Server
+### 3. Install Requirements
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Start the Server
 
 ```bash
 # If activated:
@@ -83,7 +99,7 @@ Or using `uvicorn` directly:
 uvicorn backend.main:app --reload --port 8000
 ```
 
-### 3. Open in Browser
+### 5. Open in Browser
 
 - **Web Portal**: [http://127.0.0.1:8000](http://127.0.0.1:8000)
 - **Interactive API Docs (Swagger UI)**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
