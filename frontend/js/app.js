@@ -41,6 +41,8 @@ const loginForm = document.getElementById("login-form");
 const liIdentifier = document.getElementById("li-identifier");
 const liPassword = document.getElementById("li-password");
 const btnLogin = document.getElementById("btn-login");
+const resendSection = document.getElementById("resend-section");
+const btnResendVerification = document.getElementById("btn-resend-verification");
 
 // Dashboard Elements
 const dashAvatar = document.getElementById("dash-avatar");
@@ -119,11 +121,13 @@ document.querySelectorAll(".toggle-password").forEach((button) => {
 function validateUsername(value) {
   const clean = value.trim();
   const valid = /^[a-zA-Z0-9_-]{3,30}$/.test(clean);
+
   if (!clean) {
     suUsername.classList.remove("valid-input", "invalid-input");
     valIconUsername.textContent = "";
     return false;
   }
+
   if (valid) {
     suUsername.classList.add("valid-input");
     suUsername.classList.remove("invalid-input");
@@ -142,11 +146,13 @@ function validateEmail(value) {
   const clean = value.trim();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const valid = emailRegex.test(clean);
+
   if (!clean) {
     suEmail.classList.remove("valid-input", "invalid-input");
     valIconEmail.textContent = "";
     return false;
   }
+
   if (valid) {
     suEmail.classList.add("valid-input");
     suEmail.classList.remove("invalid-input");
@@ -168,14 +174,12 @@ function evaluatePassword(pwd) {
   const hasNum = /\d/.test(pwd);
   const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(pwd);
 
-  // Update checkmarks
   updateReqItem(reqLen, hasLen);
   updateReqItem(reqUpper, hasUpper);
   updateReqItem(reqLower, hasLower);
   updateReqItem(reqNum, hasNum);
   updateReqItem(reqSpecial, hasSpecial);
 
-  // Calculate score (0 to 5)
   const checks = [hasLen, hasUpper, hasLower, hasNum, hasSpecial];
   const passedCount = checks.filter(Boolean).length;
 
@@ -219,7 +223,7 @@ function updateReqItem(element, isMet) {
     bullet.textContent = "✓";
   } else {
     element.classList.remove("met");
-    bullet.textContent = "✕";
+    bullet.textContent = "•";
   }
 }
 
@@ -258,7 +262,7 @@ suPassword.addEventListener("input", (e) => {
 });
 suConfirmPassword.addEventListener("input", checkPasswordMatch);
 
-// Signup Form Submit
+// Signup Form Submit Handler (Does NOT auto-login; prompts to verify email)
 signupForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -268,7 +272,6 @@ signupForm.addEventListener("submit", async (e) => {
   const password = suPassword.value;
   const confirmPassword = suConfirmPassword.value;
 
-  // Validate fields
   if (!validateUsername(username)) {
     showToast("Please enter a valid username (3-30 chars, alphanumeric).", "error");
     suUsername.focus();
@@ -318,11 +321,13 @@ signupForm.addEventListener("submit", async (e) => {
       throw new Error(errMsg);
     }
 
-    // Success
-    showToast("Account created successfully! Welcome aboard.", "success");
-    handleAuthSuccess(data);
+    showToast(data.message || "Account created! Check your email to verify before signing in.", "success", 7000);
     signupForm.reset();
     evaluatePassword("");
+
+    // Pre-populate username on login view and switch
+    liIdentifier.value = username;
+    switchTab("login");
   } catch (err) {
     showToast(err.message, "error");
   } finally {
@@ -330,7 +335,7 @@ signupForm.addEventListener("submit", async (e) => {
   }
 });
 
-// Login Form Submit
+// Login Form Submit Handler
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -360,18 +365,49 @@ loginForm.addEventListener("submit", async (e) => {
     const data = await response.json();
 
     if (!response.ok) {
+      // Unverified account handling
+      if (response.status === 403 && data.detail && data.detail.toLowerCase().includes("verify")) {
+        showToast(data.detail, "error", 7000);
+        if (resendSection) resendSection.classList.remove("hidden");
+        return;
+      }
       throw new Error(data.detail || "Login failed.");
     }
 
     showToast("Signed in successfully!", "success");
     handleAuthSuccess(data);
     loginForm.reset();
+    if (resendSection) resendSection.classList.add("hidden");
   } catch (err) {
     showToast(err.message, "error");
   } finally {
     setButtonLoading(btnLogin, false);
   }
 });
+
+// Resend Verification Email Listener
+if (btnResendVerification) {
+  btnResendVerification.addEventListener("click", async () => {
+    const identifier = liIdentifier.value.trim();
+    if (!identifier || !identifier.includes("@")) {
+      showToast("Please enter your email into the Sign In field above.", "error");
+      liIdentifier.focus();
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: identifier }),
+      });
+      const data = await res.json();
+      showToast(data.message || "Verification email dispatched.", "info", 5000);
+    } catch (e) {
+      showToast("Could not send verification request.", "error");
+    }
+  });
+}
 
 // Handle Successful Authentication
 function handleAuthSuccess(authData) {
@@ -391,7 +427,6 @@ function renderDashboard(user) {
   dashAvatar.textContent = (displayName[0] || "U").toUpperCase();
   dashGreetingName.textContent = `Welcome, ${displayName}!`;
   dashGreetingHandle.textContent = `@${user.username}`;
-
   dashId.textContent = `#${user.id}`;
   dashUsername.textContent = user.username;
   dashEmail.textContent = user.email;
@@ -407,10 +442,9 @@ function renderDashboard(user) {
   });
 }
 
-// Fetch all registered users from SQLite database
+// Fetch Registered Users from Database
 async function loadDatabaseUsers() {
   dbUsersTbody.innerHTML = `<tr><td colspan="5" class="table-loading">Loading users from SQLite...</td></tr>`;
-
   try {
     const response = await fetch("/api/users");
     if (!response.ok) throw new Error("Failed to fetch database users");
@@ -463,6 +497,7 @@ btnLogout.addEventListener("click", () => {
 function setButtonLoading(button, isLoading) {
   const textSpan = button.querySelector(".btn-text");
   const spinner = button.querySelector(".spinner");
+
   if (isLoading) {
     button.disabled = true;
     textSpan.classList.add("hidden");
@@ -485,10 +520,31 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+// Check Email Verification URL Parameter (?token=...)
+async function checkEmailVerificationParam() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
+  if (!token) return;
+
+  try {
+    const res = await fetch(`/api/auth/verify?token=${encodeURIComponent(token)}`);
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message || "Email verified! You can now sign in.", "success", 6000);
+      switchTab("login");
+    } else {
+      showToast(data.detail || "Verification link is invalid or expired.", "error", 6000);
+    }
+  } catch (err) {
+    showToast("Failed to connect to verification server.", "error");
+  } finally {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
+
 // Initial Session Check
 async function checkExistingSession() {
   if (!state.token) return;
-
   try {
     const response = await fetch("/api/auth/me", {
       headers: {
@@ -506,9 +562,10 @@ async function checkExistingSession() {
       state.token = null;
     }
   } catch (e) {
-    // Network or server issue, stay on login/signup
+    // Leave at sign in/up screen on connection failure
   }
 }
 
-// Start app
+// Boot application
+checkEmailVerificationParam();
 checkExistingSession();
