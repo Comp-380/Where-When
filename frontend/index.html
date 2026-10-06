@@ -144,19 +144,19 @@
             <!-- Password Requirements Checklist -->
             <ul class="pwd-requirements" id="pwd-requirements-list">
               <li id="req-len" class="req-item">
-                <span class="req-bullet">✕</span> At least 8 characters
+                <span class="req-bullet">•</span> At least 8 characters
               </li>
               <li id="req-upper" class="req-item">
-                <span class="req-bullet">✕</span> One uppercase letter (A-Z)
+                <span class="req-bullet">•</span> One uppercase letter (A-Z)
               </li>
               <li id="req-lower" class="req-item">
-                <span class="req-bullet">✕</span> One lowercase letter (a-z)
+                <span class="req-bullet">•</span> One lowercase letter (a-z)
               </li>
               <li id="req-num" class="req-item">
-                <span class="req-bullet">✕</span> One number (0-9)
+                <span class="req-bullet">•</span> One number (0-9)
               </li>
               <li id="req-special" class="req-item">
-                <span class="req-bullet">✕</span> One special symbol (!@#$%^&*)
+                <span class="req-bullet">•</span> One special symbol (!@#$%^&*)
               </li>
             </ul>
           </div>
@@ -262,6 +262,12 @@
             <span class="btn-text">Sign In</span>
             <div class="spinner hidden"></div>
           </button>
+
+          <!-- Resend Verification Link -->
+          <div id="resend-section" class="panel-footer hidden" style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px dashed var(--border-color);">
+            <span>Need a new verification link?</span>
+            <button type="button" class="link-btn" id="btn-resend-verification">Resend Email</button>
+          </div>
         </form>
 
         <div class="panel-footer">
@@ -271,7 +277,7 @@
       </section>
     </main>
 
-    <!-- DASHBOARD VIEW (Shown after authentication) -->
+    <!-- DASHBOARD VIEW -->
     <main id="dashboard-section" class="dashboard-card hidden">
       <div class="dashboard-header">
         <div class="user-greeting">
@@ -411,6 +417,6 @@
     </main>
   </div>
 
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/app.js?v=20261006"></script>
 </body>
 </html>

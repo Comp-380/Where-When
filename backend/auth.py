@@ -1,5 +1,9 @@
+import logging
 import os
+import smtplib
+import ssl
 from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 from typing import Optional
 
 import bcrypt
@@ -11,10 +15,21 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import User
 
+logger = logging.getLogger("auth")
+
 # Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production-super-safe-key-12345")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+VERIFY_TOKEN_EXPIRE_HOURS = 24
+
+# SMTP Configuration
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM = os.getenv("SMTP_FROM", "noreply@example.com")
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
 
 security = HTTPBearer(auto_error=False)
 
@@ -38,17 +53,81 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create a signed JWT token."""
+    """Create a signed JWT token for authentication."""
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
     if expires_delta:
         expire = now + expires_delta
     else:
         expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-
-    to_encode.update({"exp": expire, "iat": now})
+    to_encode.update({"exp": expire, "iat": now, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+
+def create_verification_token(email: str) -> str:
+    """Create a scoped short-lived token for email verification."""
+    expire = datetime.now(timezone.utc) + timedelta(hours=VERIFY_TOKEN_EXPIRE_HOURS)
+    payload = {
+        "sub": email,
+        "type": "email_verification",
+        "exp": expire,
+        "iat": datetime.now(timezone.utc)
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def verify_email_token(token: str) -> Optional[str]:
+    """Verify the verification token and extract the user email."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "email_verification":
+            return None
+        return payload.get("sub")
+    except jwt.PyJWTError:
+        return None
+
+
+def send_verification_email(recipient_email: str, token: str):
+    """Send verification link via SMTP or print to console."""
+    verification_link = f"{APP_BASE_URL}/api/auth/verify?token={token}"
+
+    # Print directly to console for instant local development access
+    print("\n" + "=" * 60, flush=True)
+    print(f"[VERIFICATION LINK FOR {recipient_email}]:", flush=True)
+    print(verification_link, flush=True)
+    print("=" * 60 + "\n", flush=True)
+
+    if not SMTP_HOST:
+        return
+
+    msg = EmailMessage()
+    msg["Subject"] = "Verify Your Account"
+    msg["From"] = SMTP_FROM
+    msg["To"] = recipient_email
+    msg.set_content(
+        f"Welcome! Please verify your account by clicking the link below:\n\n{verification_link}\n\n"
+        f"This link expires in {VERIFY_TOKEN_EXPIRE_HOURS} hours."
+    )
+
+    context = ssl.create_default_context()
+
+    try:
+        if SMTP_PORT == 465:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
+                if SMTP_USER and SMTP_PASSWORD:
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+                server.ehlo()
+                server.starttls(context=context)
+                server.ehlo()
+                if SMTP_USER and SMTP_PASSWORD:
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.send_message(msg)
+    except Exception as e:
+        logger.error(f"Failed to send verification email to {recipient_email}: {e}")
 
 
 def get_current_user(
@@ -61,13 +140,13 @@ def get_current_user(
         detail="Could not validate credentials or token expired",
         headers={"WWW-Authenticate": "Bearer"},
     )
-
     if not credentials:
         raise unauthorized_exception
-
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "access":
+            raise unauthorized_exception
         user_id = payload.get("sub")
         if user_id is None:
             raise unauthorized_exception
@@ -77,5 +156,4 @@ def get_current_user(
     user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None or not user.is_active:
         raise unauthorized_exception
-
     return user

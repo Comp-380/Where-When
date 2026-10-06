@@ -12,6 +12,7 @@ class User(Base):
     full_name = Column(String(100), nullable=True)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -19,4 +20,4 @@ class User(Base):
     )
 
     def __repr__(self):
-        return f"<User id={self.id} username='{self.username}' email='{self.email}'>"
+        return f"<User id={self.id} username='{self.username}' email='{self.email}' is_verified={self.is_verified}>"
