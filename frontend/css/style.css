@@ -255,6 +255,28 @@ body {
   color: var(--text-secondary);
 }
 
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.45rem;
+}
+
+.label-row label {
+  margin-bottom: 0;
+}
+
+.link-forgot {
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-decoration: none;
+  padding: 0;
+}
+
+.link-forgot:hover {
+  text-decoration: underline;
+}
+
 .req {
   color: var(--primary);
 }
