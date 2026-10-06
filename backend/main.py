@@ -10,18 +10,23 @@ from sqlalchemy.orm import Session
 
 from backend.auth import (
     create_access_token,
+    create_password_reset_token,
     create_verification_token,
     get_current_user,
     hash_password,
+    send_password_reset_email,
     send_verification_email,
     verify_email_token,
     verify_password,
+    verify_password_reset_token,
 )
 from backend.database import Base, engine, get_db
 from backend.models import User
 from backend.schemas import (
+    ForgotPasswordRequest,
     MessageResponse,
     ResendVerificationRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserCreate,
     UserLogin,
@@ -205,6 +210,71 @@ def login(login_in: UserLogin, db: Session = Depends(get_db)):
     )
 
 
+@app.post(
+    "/api/auth/forgot-password",
+    response_model=MessageResponse,
+    summary="Request a password reset link via email",
+)
+def forgot_password(
+    request: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.email == request.email.strip().lower()).first()
+    if not user or not user.is_active:
+        # Generic response to prevent account enumeration
+        return MessageResponse(
+            message="If an account with this email exists, a password reset link has been sent."
+        )
+
+    reset_token = create_password_reset_token(user)
+    background_tasks.add_task(send_password_reset_email, user.email, reset_token)
+    return MessageResponse(
+        message="If an account with this email exists, a password reset link has been sent."
+    )
+
+
+@app.get(
+    "/api/auth/verify-reset-token",
+    response_model=MessageResponse,
+    summary="Verify if a password reset token is valid and unexpired",
+)
+def verify_reset_token(token: str, db: Session = Depends(get_db)):
+    user = verify_password_reset_token(token, db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password reset token is invalid or has expired.",
+        )
+    return MessageResponse(message="Password reset token is valid.")
+
+
+@app.post(
+    "/api/auth/reset-password",
+    response_model=MessageResponse,
+    summary="Reset user password using a valid reset token",
+)
+def reset_password(
+    request: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    user = verify_password_reset_token(request.token, db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password reset token is invalid or has expired.",
+        )
+
+    user.hashed_password = hash_password(request.password)
+    # Resetting password via email token also proves email ownership
+    user.is_verified = True
+    db.commit()
+
+    return MessageResponse(
+        message="Your password has been successfully reset. You can now log in."
+    )
+
+
 @app.get(
     "/api/auth/me",
     response_model=UserResponse,
@@ -230,6 +300,7 @@ if FRONTEND_DIR.exists():
 
 
 @app.get("/", include_in_schema=False)
+@app.get("/reset-password", include_in_schema=False)
 def index():
     index_file = FRONTEND_DIR / "index.html"
     if index_file.exists():
