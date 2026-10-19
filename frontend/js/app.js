@@ -7,6 +7,7 @@ const state = {
 // DOM Elements
 const authSection = document.getElementById("auth-section");
 const dashboardSection = document.getElementById("dashboard-section");
+
 // Tab / View Elements
 const tabSignupBtn = document.getElementById("tab-signup-btn");
 const tabLoginBtn = document.getElementById("tab-login-btn");
@@ -14,6 +15,7 @@ const signupView = document.getElementById("signup-view");
 const loginView = document.getElementById("login-view");
 const forgotView = document.getElementById("forgot-view");
 const resetView = document.getElementById("reset-view");
+
 const linkToLogin = document.getElementById("link-to-login");
 const linkToSignup = document.getElementById("link-to-signup");
 const btnForgotPassword = document.getElementById("btn-forgot-password");
@@ -83,6 +85,7 @@ const dashJoined = document.getElementById("dash-joined");
 const dbUsersTbody = document.getElementById("db-users-tbody");
 const btnRefreshUsers = document.getElementById("btn-refresh-users");
 const btnLogout = document.getElementById("btn-logout");
+
 const toastContainer = document.getElementById("toast-container");
 
 // Toast Notification Utility
@@ -100,9 +103,8 @@ function showToast(message, type = "info", duration = 4000) {
   }, duration);
 }
 
-// Tab Switching
+// Tab Switching (Default tab: login)
 function switchTab(target) {
-  // Hide all panels
   signupView.classList.remove("active");
   loginView.classList.remove("active");
   if (forgotView) forgotView.classList.remove("active");
@@ -143,6 +145,7 @@ if (btnForgotPassword) {
     switchTab("forgot");
   });
 }
+
 if (linkFpToLogin) linkFpToLogin.addEventListener("click", () => switchTab("login"));
 if (linkRpToLogin) linkRpToLogin.addEventListener("click", () => switchTab("login"));
 
@@ -272,7 +275,7 @@ function updateReqItem(element, isMet) {
     bullet.textContent = "✓";
   } else {
     element.classList.remove("met");
-    bullet.textContent = "•";
+    bullet.textContent = "○";
   }
 }
 
@@ -311,7 +314,7 @@ suPassword.addEventListener("input", (e) => {
 });
 suConfirmPassword.addEventListener("input", checkPasswordMatch);
 
-// Signup Form Submit Handler (Does NOT auto-login; prompts to verify email)
+// Signup Form Submit Handler
 signupForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -414,7 +417,6 @@ loginForm.addEventListener("submit", async (e) => {
     const data = await response.json();
 
     if (!response.ok) {
-      // Unverified account handling
       if (response.status === 403 && data.detail && data.detail.toLowerCase().includes("verify")) {
         showToast(data.detail, "error", 7000);
         if (resendSection) resendSection.classList.remove("hidden");
@@ -492,8 +494,8 @@ if (fpEmail) {
 if (forgotForm) {
   forgotForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-
     const email = fpEmail.value.trim();
+
     if (!validateFpEmail(email)) {
       showToast("Please enter a valid email address.", "error");
       fpEmail.focus();
@@ -501,13 +503,16 @@ if (forgotForm) {
     }
 
     setButtonLoading(btnForgot, true);
+
     try {
       const response = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
+
       const data = await response.json();
+
       if (!response.ok) {
         throw new Error(data.detail || "Failed to request password reset.");
       }
@@ -591,7 +596,7 @@ function checkResetPasswordMatch() {
 
   if (pwd === confirm) {
     rpConfirmMatchHint.textContent = "✓ Passwords match";
-    rpConfirmMatchHint.className = "field-hint success";
+    confirmMatchHint.className = "field-hint success";
     rpConfirmPassword.classList.add("valid-input");
     rpConfirmPassword.classList.remove("invalid-input");
     return true;
@@ -628,13 +633,11 @@ if (resetForm) {
       showToast("Reset token is missing. Please use the link sent to your email.", "error");
       return;
     }
-
     if (!evaluateResetPassword(password)) {
       showToast("Password does not meet all security requirements.", "error");
       rpPassword.focus();
       return;
     }
-
     if (password !== confirmPassword) {
       showToast("Passwords do not match.", "error");
       rpConfirmPassword.focus();
@@ -642,6 +645,7 @@ if (resetForm) {
     }
 
     setButtonLoading(btnReset, true);
+
     try {
       const response = await fetch("/api/auth/reset-password", {
         method: "POST",
@@ -652,7 +656,9 @@ if (resetForm) {
           confirm_password: confirmPassword,
         }),
       });
+
       const data = await response.json();
+
       if (!response.ok) {
         throw new Error(data.detail || "Password reset failed.");
       }
@@ -678,6 +684,7 @@ function handleAuthSuccess(authData) {
   state.token = authData.access_token;
   state.currentUser = authData.user;
   localStorage.setItem("token", authData.access_token);
+
   renderDashboard(authData.user);
   loadDatabaseUsers();
 }
@@ -691,6 +698,7 @@ function renderDashboard(user) {
   dashAvatar.textContent = (displayName[0] || "U").toUpperCase();
   dashGreetingName.textContent = `Welcome, ${displayName}!`;
   dashGreetingHandle.textContent = `@${user.username}`;
+
   dashId.textContent = `#${user.id}`;
   dashUsername.textContent = user.username;
   dashEmail.textContent = user.email;
@@ -709,6 +717,7 @@ function renderDashboard(user) {
 // Fetch Registered Users from Database
 async function loadDatabaseUsers() {
   dbUsersTbody.innerHTML = `<tr><td colspan="5" class="table-loading">Loading users from SQLite...</td></tr>`;
+
   try {
     const response = await fetch("/api/users");
     if (!response.ok) throw new Error("Failed to fetch database users");
@@ -728,6 +737,7 @@ async function loadDatabaseUsers() {
           hour: "2-digit",
           minute: "2-digit",
         });
+
         return `
         <tr>
           <td><strong>#${u.id}</strong></td>
@@ -746,14 +756,14 @@ async function loadDatabaseUsers() {
 
 btnRefreshUsers.addEventListener("click", loadDatabaseUsers);
 
-// Logout Handler
+// Logout Handler (Resets to Login view)
 btnLogout.addEventListener("click", () => {
   state.token = null;
   state.currentUser = null;
   localStorage.removeItem("token");
   dashboardSection.classList.add("hidden");
   authSection.classList.remove("hidden");
-  switchTab("signup");
+  switchTab("login");
   showToast("You have been signed out.", "info");
 });
 
@@ -788,12 +798,14 @@ function escapeHtml(str) {
 async function checkEmailVerificationParam() {
   const params = new URLSearchParams(window.location.search);
   if (params.get("reset_token") || window.location.pathname.includes("reset-password")) return;
+
   const token = params.get("token");
   if (!token) return;
 
   try {
     const res = await fetch(`/api/auth/verify?token=${encodeURIComponent(token)}`);
     const data = await res.json();
+
     if (res.ok) {
       showToast(data.message || "Email verified! You can now sign in.", "success", 6000);
       switchTab("login");
@@ -813,11 +825,13 @@ async function checkPasswordResetParam() {
   const resetToken =
     params.get("reset_token") ||
     (window.location.pathname.includes("reset-password") ? params.get("token") : null);
+
   if (!resetToken) return;
 
   try {
     const res = await fetch(`/api/auth/verify-reset-token?token=${encodeURIComponent(resetToken)}`);
     const data = await res.json();
+
     if (res.ok) {
       if (rpToken) rpToken.value = resetToken;
       showToast("Reset token verified. Please enter your new password.", "info", 5000);
@@ -836,6 +850,7 @@ async function checkPasswordResetParam() {
 // Initial Session Check
 async function checkExistingSession() {
   if (!state.token) return;
+
   try {
     const response = await fetch("/api/auth/me", {
       headers: {
@@ -853,11 +868,12 @@ async function checkExistingSession() {
       state.token = null;
     }
   } catch (e) {
-    // Leave at sign in/up screen on connection failure
+    // Leave at Sign In on connection failure
   }
 }
 
 // Boot application
+switchTab("login");
 checkEmailVerificationParam();
 checkPasswordResetParam();
 checkExistingSession();
