@@ -122,3 +122,17 @@ class ResetPasswordRequest(BaseModel):
         if self.confirm_password is not None and self.password != self.confirm_password:
             raise ValueError("Passwords do not match.")
         return self
+
+class UserProfileResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    full_name: Optional[str] = None
+    display_name: Optional[str] = None
+    profile_picture: Optional[str] = None
+    general_location: Optional[str] = None
+    activity_interests: Optional[str] = None
+    bio: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
