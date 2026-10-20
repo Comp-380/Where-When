@@ -94,6 +94,7 @@ function showToast(message, type = "info", duration = 4000) {
   toast.className = `toast ${type}`;
   toast.textContent = message;
   toastContainer.appendChild(toast);
+
   setTimeout(() => {
     toast.style.opacity = "0";
     toast.style.transform = "translateX(40px)";
@@ -108,6 +109,7 @@ function switchTab(target) {
   loginView.classList.remove("active");
   if (forgotView) forgotView.classList.remove("active");
   if (resetView) resetView.classList.remove("active");
+
   tabSignupBtn.classList.remove("active");
   tabSignupBtn.setAttribute("aria-selected", "false");
   tabLoginBtn.classList.remove("active");
@@ -171,20 +173,22 @@ document.querySelectorAll(".toggle-password").forEach((button) => {
 function validateUsername(value) {
   const clean = value.trim();
   const valid = /^[a-zA-Z0-9_-]{3,30}$/.test(clean);
+
   if (!clean) {
     suUsername.classList.remove("valid-input", "invalid-input");
     valIconUsername.textContent = "";
     return false;
   }
+
   if (valid) {
     suUsername.classList.add("valid-input");
     suUsername.classList.remove("invalid-input");
-    valIconUsername.textContent = "✔";
+    valIconUsername.textContent = "✓";
     valIconUsername.style.color = "#10b981";
   } else {
     suUsername.classList.add("invalid-input");
     suUsername.classList.remove("valid-input");
-    valIconUsername.textContent = "✖";
+    valIconUsername.textContent = "✕";
     valIconUsername.style.color = "#ef4444";
   }
   return valid;
@@ -194,20 +198,22 @@ function validateEmail(value) {
   const clean = value.trim();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const valid = emailRegex.test(clean);
+
   if (!clean) {
     suEmail.classList.remove("valid-input", "invalid-input");
     valIconEmail.textContent = "";
     return false;
   }
+
   if (valid) {
     suEmail.classList.add("valid-input");
     suEmail.classList.remove("invalid-input");
-    valIconEmail.textContent = "✔";
+    valIconEmail.textContent = "✓";
     valIconEmail.style.color = "#10b981";
   } else {
     suEmail.classList.add("invalid-input");
     suEmail.classList.remove("valid-input");
-    valIconEmail.textContent = "✖";
+    valIconEmail.textContent = "✕";
     valIconEmail.style.color = "#ef4444";
   }
   return valid;
@@ -266,7 +272,7 @@ function updateReqItem(element, isMet) {
   const bullet = element.querySelector(".req-bullet");
   if (isMet) {
     element.classList.add("met");
-    bullet.textContent = "✔";
+    bullet.textContent = "✓";
   } else {
     element.classList.remove("met");
     bullet.textContent = "•";
@@ -285,13 +291,13 @@ function checkPasswordMatch() {
   }
 
   if (pwd === confirm) {
-    confirmMatchHint.textContent = "✔ Passwords match";
+    confirmMatchHint.textContent = "✓ Passwords match";
     confirmMatchHint.className = "field-hint success";
     suConfirmPassword.classList.add("valid-input");
     suConfirmPassword.classList.remove("invalid-input");
     return true;
   } else {
-    confirmMatchHint.textContent = "✖ Passwords do not match";
+    confirmMatchHint.textContent = "✕ Passwords do not match";
     confirmMatchHint.className = "field-hint error";
     suConfirmPassword.classList.add("invalid-input");
     suConfirmPassword.classList.remove("valid-input");
@@ -355,7 +361,6 @@ signupForm.addEventListener("submit", async (e) => {
         confirm_password: confirmPassword,
       }),
     });
-
     const data = await response.json();
     if (!response.ok) {
       const errMsg = Array.isArray(data.detail)
@@ -363,7 +368,6 @@ signupForm.addEventListener("submit", async (e) => {
         : data.detail || "Registration failed.";
       throw new Error(errMsg);
     }
-
     showToast(data.message || "Account created! Check your email to verify before signing in.", "success", 7000);
     signupForm.reset();
     evaluatePassword("");
@@ -401,13 +405,9 @@ loginForm.addEventListener("submit", async (e) => {
       body: JSON.stringify({ identifier, password }),
     });
 
-<<<<<<< HEAD
-    const data = await response.json();
-=======
     if (!(response.headers.get("content-type") || "").includes("application/json")) {
       throw new Error("The server could not process your login. Please try again shortly.");
     }
->>>>>>> 64d6eb4eff64902556c62e5f814dbf36454c4fb5
 
     const data = await response.json();
     if (!response.ok) {
@@ -418,7 +418,6 @@ loginForm.addEventListener("submit", async (e) => {
       }
       throw new Error(data.detail || "Login failed.");
     }
-
     showToast("Signed in successfully!", "success");
     handleAuthSuccess(data);
     loginForm.reset();
@@ -439,7 +438,6 @@ if (btnResendVerification) {
       liIdentifier.focus();
       return;
     }
-
     try {
       const res = await fetch("/api/auth/resend-verification", {
         method: "POST",
@@ -459,20 +457,22 @@ function validateFpEmail(value) {
   const clean = value.trim();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const valid = emailRegex.test(clean);
+
   if (!clean) {
     fpEmail.classList.remove("valid-input", "invalid-input");
     valIconFpEmail.textContent = "";
     return false;
   }
+
   if (valid) {
     fpEmail.classList.add("valid-input");
     fpEmail.classList.remove("invalid-input");
-    valIconFpEmail.textContent = "✔";
+    valIconFpEmail.textContent = "✓";
     valIconFpEmail.style.color = "#10b981";
   } else {
     fpEmail.classList.add("invalid-input");
     fpEmail.classList.remove("valid-input");
-    valIconFpEmail.textContent = "✖";
+    valIconFpEmail.textContent = "✕";
     valIconFpEmail.style.color = "#ef4444";
   }
   return valid;
@@ -582,13 +582,13 @@ function checkResetPasswordMatch() {
   }
 
   if (pwd === confirm) {
-    rpConfirmMatchHint.textContent = "✔ Passwords match";
-    confirmMatchHint.className = "field-hint success";
+    rpConfirmMatchHint.textContent = "✓ Passwords match";
+    rpConfirmMatchHint.className = "field-hint success";
     rpConfirmPassword.classList.add("valid-input");
     rpConfirmPassword.classList.remove("invalid-input");
     return true;
   } else {
-    rpConfirmMatchHint.textContent = "✖ Passwords do not match";
+    rpConfirmMatchHint.textContent = "✕ Passwords do not match";
     rpConfirmMatchHint.className = "field-hint error";
     rpConfirmPassword.classList.add("invalid-input");
     rpConfirmPassword.classList.remove("valid-input");
@@ -641,12 +641,10 @@ if (resetForm) {
           confirm_password: confirmPassword,
         }),
       });
-
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.detail || "Password reset failed.");
       }
-
       showToast(
         data.message || "Your password has been successfully reset! You can now log in.",
         "success",
@@ -678,7 +676,6 @@ function renderDashboard(user) {
   dashboardSection.classList.remove("hidden");
 
   const displayName = user.full_name || user.username;
-
   if (user.avatar_url) {
     dashAvatarImg.src = user.avatar_url;
     dashAvatarImg.classList.remove("hidden");
@@ -761,7 +758,6 @@ btnLogout.addEventListener("click", () => {
 function setButtonLoading(button, isLoading) {
   const textSpan = button.querySelector(".btn-text");
   const spinner = button.querySelector(".spinner");
-
   if (isLoading) {
     button.disabled = true;
     textSpan.classList.add("hidden");
@@ -788,6 +784,7 @@ function escapeHtml(str) {
 async function checkEmailVerificationParam() {
   const params = new URLSearchParams(window.location.search);
   if (params.get("reset_token") || window.location.pathname.includes("reset-password")) return;
+
   const token = params.get("token");
   if (!token) return;
 
@@ -813,6 +810,7 @@ async function checkPasswordResetParam() {
   const resetToken =
     params.get("reset_token") ||
     (window.location.pathname.includes("reset-password") ? params.get("token") : null);
+
   if (!resetToken) return;
 
   try {
@@ -860,6 +858,7 @@ if (avatarInput) {
   avatarInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
     if (file.size > 5 * 1024 * 1024) {
       showToast("Image must be smaller than 5MB", "error");
       avatarInput.value = "";
@@ -883,7 +882,6 @@ if (avatarInput) {
       if (!res.ok) {
         throw new Error(data.detail || "Failed to upload avatar");
       }
-
       state.currentUser = data;
       renderDashboard(data);
       showToast("Profile picture updated!", "success");

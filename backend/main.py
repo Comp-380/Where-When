@@ -1,13 +1,10 @@
 import shutil
 import uuid
-from pathlib import Path
-from typing import List
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status, File, UploadFile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -25,30 +22,29 @@ from backend.auth import (
     verify_password,
     verify_password_reset_token,
 )
-from backend.database import Base, engine, get_db
+from backend.database import get_db, initialize_database
 from backend.models import User
 from backend.schemas import (
     ForgotPasswordRequest,
     MessageResponse,
+    ProfileUpdate,
     ResendVerificationRequest,
     ResetPasswordRequest,
     TokenResponse,
     UserCreate,
     UserLogin,
+    UserProfileResponse,
     UserResponse,
 )
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
-
-
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads" / "avatars"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create database tables on startup
-    Base.metadata.create_all(bind=engine)
+    initialize_database()
     yield
 
 
@@ -59,7 +55,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -80,7 +75,6 @@ def signup(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    # Check if username already exists
     existing_user_by_username = (
         db.query(User).filter(User.username == user_in.username).first()
     )
@@ -90,7 +84,6 @@ def signup(
             detail="A user with this username already exists.",
         )
 
-    # Check if email already exists
     existing_user_by_email = (
         db.query(User).filter(User.email == user_in.email).first()
     )
@@ -100,7 +93,6 @@ def signup(
             detail="A user with this email address already exists.",
         )
 
-    # Hash the password and persist unverified user record
     hashed_pwd = hash_password(user_in.password)
     new_user = User(
         username=user_in.username,
@@ -114,10 +106,8 @@ def signup(
     db.commit()
     db.refresh(new_user)
 
-    # Generate token and queue verification email
     verify_token = create_verification_token(new_user.email)
     background_tasks.add_task(send_verification_email, new_user.email, verify_token)
-
     return MessageResponse(
         message="Registration successful. Please check your email to verify your account before logging in."
     )
@@ -135,17 +125,14 @@ def verify_email(token: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Verification token is invalid or has expired.",
         )
-
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User associated with this token was not found.",
         )
-
     if user.is_verified:
         return MessageResponse(message="Email is already verified. You can log in.")
-
     user.is_verified = True
     db.commit()
     return MessageResponse(message="Email successfully verified. You can now log in.")
@@ -163,11 +150,9 @@ def resend_verification(
 ):
     user = db.query(User).filter(User.email == request.email.strip().lower()).first()
     if not user:
-        # Generic response to prevent account enumeration
         return MessageResponse(
             message="If an unverified account with this email exists, a verification link has been sent."
         )
-
     if user.is_verified:
         return MessageResponse(message="This account is already verified.")
 
@@ -185,26 +170,21 @@ def resend_verification(
 )
 def login(login_in: UserLogin, db: Session = Depends(get_db)):
     identifier = login_in.identifier.strip().lower()
-
-    # Query matching email or username
     user = (
         db.query(User)
         .filter((User.email == identifier) | (User.username == identifier))
         .first()
     )
-
     if not user or not verify_password(login_in.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials. Please check your username/email and password.",
         )
-
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This user account has been disabled.",
         )
-
     if not user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -231,7 +211,6 @@ def forgot_password(
 ):
     user = db.query(User).filter(User.email == request.email.strip().lower()).first()
     if not user or not user.is_active:
-        # Generic response to prevent account enumeration
         return MessageResponse(
             message="If an account with this email exists, a password reset link has been sent."
         )
@@ -273,15 +252,13 @@ def reset_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password reset token is invalid or has expired.",
         )
-
     user.hashed_password = hash_password(request.password)
-    # Resetting password via email token also proves email ownership
     user.is_verified = True
     db.commit()
-
     return MessageResponse(
         message="Your password has been successfully reset. You can now log in."
     )
+
 
 @app.post(
     "/api/users/me/avatar",
@@ -299,21 +276,18 @@ def upload_avatar(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid image format. Allowed formats: JPEG, PNG, WEBP, GIF.",
         )
-
     ext = Path(file.filename or "").suffix.lower()
     if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
         ext = ".png"
 
     unique_filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}{ext}"
     dest_path = UPLOAD_DIR / unique_filename
-
     with dest_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     current_user.avatar_url = f"/media/avatars/{unique_filename}"
     db.commit()
     db.refresh(current_user)
-
     return current_user
 
 
@@ -332,15 +306,14 @@ def get_me(current_user: User = Depends(get_current_user)):
     summary="List registered users (for database demo purposes)",
 )
 def list_users(db: Session = Depends(get_db)):
-    users = db.query(User).order_by(User.id.desc()).all()
-    return users
+    return db.query(User).order_by(User.id.desc()).all()
 
 
-# Mount static assets
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 app.mount("/media/avatars", StaticFiles(directory=str(UPLOAD_DIR)), name="avatars")
+
 
 @app.get("/", include_in_schema=False)
 @app.get("/reset-password", include_in_schema=False)
@@ -352,7 +325,7 @@ def index():
         "message": "User Auth API is running. Access /docs for interactive Swagger documentation."
     }
 
-# 1. RETRIEVE USER PROFILE RECORD
+
 @app.get(
     "/api/users/profile",
     response_model=UserProfileResponse,
@@ -362,7 +335,6 @@ def get_user_profile(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-# 2. UPDATE USER PROFILE RECORD
 @app.put(
     "/api/users/profile",
     response_model=UserProfileResponse,
@@ -389,7 +361,6 @@ def update_user_profile(
     return current_user
 
 
-# 3. DELETE USER PROFILE RECORD
 @app.delete(
     "/api/users/profile",
     response_model=MessageResponse,

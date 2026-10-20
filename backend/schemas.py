@@ -78,7 +78,6 @@ class UserResponse(BaseModel):
     is_verified: bool
     created_at: datetime
     avatar_url: Optional[str] = None
-
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -124,8 +123,6 @@ class ResetPasswordRequest(BaseModel):
             raise ValueError("Passwords do not match.")
         return self
 
-<<<<<<< HEAD
-=======
 
 class ProfileUpdate(BaseModel):
     profile_picture: Optional[str] = None
@@ -135,7 +132,6 @@ class ProfileUpdate(BaseModel):
     bio: Optional[str] = None
 
 
->>>>>>> 64d6eb4eff64902556c62e5f814dbf36454c4fb5
 class UserProfileResponse(BaseModel):
     id: int
     username: str
@@ -147,5 +143,4 @@ class UserProfileResponse(BaseModel):
     activity_interests: Optional[str] = None
     bio: Optional[str] = None
     created_at: datetime
-
     model_config = ConfigDict(from_attributes=True)

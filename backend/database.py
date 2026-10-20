@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_FILE = os.getenv("DATABASE_FILE", "users.db")
@@ -11,18 +11,16 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
 
 
-<<<<<<< HEAD
-=======
 def initialize_database(db_engine=engine):
     """Create tables and upgrade databases created before avatar/profile support."""
     from backend import models  # Register models before creating tables
     Base.metadata.create_all(bind=db_engine)
-
-    columns = {column["name"] for column in inspect(db_engine).get_columns("users")}
+    
+    inspector = inspect(db_engine)
+    columns = {column["name"] for column in inspector.get_columns("users")}
     profile_columns = {
         "avatar_url": "VARCHAR(255)",
         "display_name": "VARCHAR(100)",
@@ -31,14 +29,12 @@ def initialize_database(db_engine=engine):
         "activity_interests": "VARCHAR(255)",
         "bio": "VARCHAR(500)",
     }
-
     with db_engine.begin() as connection:
         for col_name, col_type in profile_columns.items():
             if col_name not in columns:
                 connection.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
 
 
->>>>>>> 64d6eb4eff64902556c62e5f814dbf36454c4fb5
 def get_db():
     """Dependency that yields a database session and ensures it closes."""
     db = SessionLocal()
