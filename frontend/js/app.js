@@ -416,6 +416,9 @@ loginForm.addEventListener("submit", async (e) => {
       body: JSON.stringify({ identifier, password }),
     });
 
+    if (!(response.headers.get("content-type") || "").includes("application/json")) {
+      throw new Error("The server could not process your login. Please try again shortly.");
+    }
     const data = await response.json();
 
     if (!response.ok) {
