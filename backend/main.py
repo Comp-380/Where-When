@@ -25,16 +25,18 @@ from backend.auth import (
     verify_password,
     verify_password_reset_token,
 )
-from backend.database import Base, engine, get_db
+from backend.database import Base, engine, get_db, initialize_database
 from backend.models import User
 from backend.schemas import (
     ForgotPasswordRequest,
     MessageResponse,
+    ProfileUpdate,
     ResendVerificationRequest,
     ResetPasswordRequest,
     TokenResponse,
     UserCreate,
     UserLogin,
+    UserProfileResponse,
     UserResponse,
 )
 
@@ -48,7 +50,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create database tables on startup
-    Base.metadata.create_all(bind=engine)
+    initialize_database()
     yield
 
 
@@ -351,3 +353,54 @@ def index():
     return {
         "message": "User Auth API is running. Access /docs for interactive Swagger documentation."
     }
+
+# 1. RETRIEVE USER PROFILE RECORD
+@app.get(
+    "/api/users/profile",
+    response_model=UserProfileResponse,
+    summary="Retrieve current logged-in user profile",
+)
+def get_user_profile(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+# 2. UPDATE USER PROFILE RECORD
+@app.put(
+    "/api/users/profile",
+    response_model=UserProfileResponse,
+    summary="Update or complete user profile",
+)
+def update_user_profile(
+    profile_data: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if profile_data.profile_picture is not None:
+        current_user.profile_picture = profile_data.profile_picture
+    if profile_data.display_name is not None:
+        current_user.display_name = profile_data.display_name
+    if profile_data.general_location is not None:
+        current_user.general_location = profile_data.general_location
+    if profile_data.activity_interests is not None:
+        current_user.activity_interests = profile_data.activity_interests
+    if profile_data.bio is not None:
+        current_user.bio = profile_data.bio
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+# 3. DELETE USER PROFILE RECORD
+@app.delete(
+    "/api/users/profile",
+    response_model=MessageResponse,
+    summary="Delete user account and profile record",
+)
+def delete_user_profile(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    db.delete(current_user)
+    db.commit()
+    return MessageResponse(message="User profile and account successfully deleted.")
