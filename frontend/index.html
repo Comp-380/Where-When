@@ -598,7 +598,20 @@
       </div>
     </footer>
   </div>
-
+<!-- Post-Login Profile Completion Prompt Modal -->
+  <div id="profile-prompt-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h3>Complete Your Profile</h3>
+      <p>Would you like to add your profile information now or do it later?</p>
+      <div class="modal-actions">
+        <button type="button" id="btn-modal-later" class="btn-secondary">Maybe later</button>
+        <button type="button" id="btn-modal-complete" class="btn-primary">
+          <span class="btn-text">Complete Profile</span>
+          <div class="spinner hidden"></div>
+        </button>
+      </div>
+    </div>
+  </div>
   <script src="/static/js/app.js?v=20261013-login-default"></script>
 </body>
 </html>
