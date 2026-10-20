@@ -62,8 +62,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire, "iat": now, "type": "access"})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def create_verification_token(email: str) -> str:
@@ -92,11 +91,6 @@ def verify_email_token(token: str) -> Optional[str]:
 def send_verification_email(recipient_email: str, token: str):
     """Send verification link via SMTP or print to console."""
     verification_link = f"{APP_BASE_URL}/api/auth/verify?token={token}"
-
-<<<<<<< HEAD
-    # Print directly to console for instant local development access
-=======
->>>>>>> 64d6eb4eff64902556c62e5f814dbf36454c4fb5
     print("\n" + "=" * 60, flush=True)
     print(f"[VERIFICATION LINK FOR {recipient_email}]:", flush=True)
     print(verification_link, flush=True)
@@ -117,11 +111,7 @@ def send_verification_email(recipient_email: str, token: str):
     context = ssl.create_default_context()
     try:
         if SMTP_PORT == 465:
-<<<<<<< HEAD
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
-=======
             with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15, context=context) as server:
->>>>>>> 64d6eb4eff64902556c62e5f814dbf36454c4fb5
                 if SMTP_USER and SMTP_PASSWORD:
                     server.login(SMTP_USER, SMTP_PASSWORD)
                 server.send_message(msg)
@@ -133,10 +123,7 @@ def send_verification_email(recipient_email: str, token: str):
                 if SMTP_USER and SMTP_PASSWORD:
                     server.login(SMTP_USER, SMTP_PASSWORD)
                 server.send_message(msg)
-<<<<<<< HEAD
-=======
         logger.info("SMTP server accepted verification email for %s.", recipient_email)
->>>>>>> 64d6eb4eff64902556c62e5f814dbf36454c4fb5
     except Exception as e:
         logger.error(f"Failed to send verification email to {recipient_email}: {e}")
 
@@ -171,10 +158,7 @@ def verify_password_reset_token(token: str, db: Session) -> Optional[User]:
     if not user or not user.is_active:
         return None
 
-<<<<<<< HEAD
     # Invalidate if password has already changed since token generation
-=======
->>>>>>> 64d6eb4eff64902556c62e5f814dbf36454c4fb5
     if user.hashed_password[:16] != pwd_sig:
         return None
 
@@ -184,11 +168,6 @@ def verify_password_reset_token(token: str, db: Session) -> Optional[User]:
 def send_password_reset_email(recipient_email: str, token: str):
     """Send password reset link via SMTP or print to console."""
     reset_link = f"{APP_BASE_URL}/?reset_token={token}"
-
-<<<<<<< HEAD
-    # Print directly to console for instant local development access
-=======
->>>>>>> 64d6eb4eff64902556c62e5f814dbf36454c4fb5
     print("\n" + "=" * 60, flush=True)
     print(f"[PASSWORD RESET LINK FOR {recipient_email}]:", flush=True)
     print(reset_link, flush=True)
@@ -208,16 +187,9 @@ def send_password_reset_email(recipient_email: str, token: str):
     )
 
     context = ssl.create_default_context()
-<<<<<<< HEAD
-
-    try:
-        if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
-=======
     try:
         if SMTP_PORT == 465:
             with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15, context=context) as server:
->>>>>>> 64d6eb4eff64902556c62e5f814dbf36454c4fb5
                 if SMTP_USER and SMTP_PASSWORD:
                     server.login(SMTP_USER, SMTP_PASSWORD)
                 server.send_message(msg)
@@ -243,6 +215,7 @@ def get_current_user(
         detail="Could not validate credentials or token expired",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
     if not credentials:
         raise unauthorized_exception
 
@@ -260,4 +233,5 @@ def get_current_user(
     user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None or not user.is_active:
         raise unauthorized_exception
+
     return user
