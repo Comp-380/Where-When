@@ -1,11 +1,10 @@
 import re
-from datetime import datetime
-from typing import Optional
+from datetime import date as DateType, time as TimeType, datetime
+from typing import Optional, List
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 def validate_password_complexity(v: str) -> str:
-    """Validate that password meets security complexity rules."""
     if len(v) < 8:
         raise ValueError("Password must be at least 8 characters long.")
     if not re.search(r"[a-z]", v):
@@ -20,24 +19,11 @@ def validate_password_complexity(v: str) -> str:
 
 
 class UserCreate(BaseModel):
-    username: str = Field(
-        ...,
-        min_length=3,
-        max_length=30,
-        description="Username between 3 and 30 characters, alphanumeric, underscores or hyphens."
-    )
-    email: EmailStr = Field(..., description="Valid email address.")
-    full_name: Optional[str] = Field(None, max_length=100, description="Optional display name.")
-    password: str = Field(
-        ...,
-        min_length=8,
-        max_length=128,
-        description="Password must be at least 8 characters long."
-    )
-    confirm_password: Optional[str] = Field(
-        None,
-        description="Password confirmation that must match the password."
-    )
+    username: str = Field(..., min_length=3, max_length=30)
+    email: EmailStr = Field(...)
+    full_name: Optional[str] = Field(None, max_length=100)
+    password: str = Field(..., min_length=8, max_length=128)
+    confirm_password: Optional[str] = Field(None)
 
     @field_validator("username")
     @classmethod
@@ -74,10 +60,10 @@ class UserResponse(BaseModel):
     username: str
     email: str
     full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
     is_active: bool
     is_verified: bool
     created_at: datetime
-    avatar_url: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -100,17 +86,9 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    token: str = Field(..., description="Password reset token received via email.")
-    password: str = Field(
-        ...,
-        min_length=8,
-        max_length=128,
-        description="Password must be at least 8 characters long."
-    )
-    confirm_password: Optional[str] = Field(
-        None,
-        description="Password confirmation that must match the password."
-    )
+    token: str = Field(...)
+    password: str = Field(..., min_length=8, max_length=128)
+    confirm_password: Optional[str] = Field(None)
 
     @field_validator("password")
     @classmethod
@@ -124,23 +102,26 @@ class ResetPasswordRequest(BaseModel):
         return self
 
 
-class ProfileUpdate(BaseModel):
-    profile_picture: Optional[str] = None
-    display_name: Optional[str] = None
-    general_location: Optional[str] = None
-    activity_interests: Optional[str] = None
-    bio: Optional[str] = None
+# --- Availability Schemas ---
+class AvailabilityCreate(BaseModel):
+    date: DateType
+    start_time: TimeType
+    end_time: TimeType
+    title: Optional[str] = "Available"
+
+    @model_validator(mode="after")
+    def validate_times(self):
+        if self.start_time >= self.end_time:
+            raise ValueError("Start time must be before end time.")
+        return self
 
 
-class UserProfileResponse(BaseModel):
+class AvailabilityResponse(BaseModel):
     id: int
-    username: str
-    email: str
-    full_name: Optional[str] = None
-    display_name: Optional[str] = None
-    profile_picture: Optional[str] = None
-    general_location: Optional[str] = None
-    activity_interests: Optional[str] = None
-    bio: Optional[str] = None
+    user_id: int
+    date: DateType
+    start_time: TimeType
+    end_time: TimeType
+    title: str
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)

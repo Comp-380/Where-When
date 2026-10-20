@@ -2,6 +2,9 @@
 const state = {
   token: localStorage.getItem("token") || null,
   currentUser: null,
+  currentCalDate: new Date(),
+  selectedDateStr: null,
+  userAvailabilities: [],
 };
 
 // DOM Elements
@@ -87,6 +90,17 @@ const dbUsersTbody = document.getElementById("db-users-tbody");
 const btnRefreshUsers = document.getElementById("btn-refresh-users");
 const btnLogout = document.getElementById("btn-logout");
 const toastContainer = document.getElementById("toast-container");
+const calPrevBtn = document.getElementById("cal-prev-btn");
+const calNextBtn = document.getElementById("cal-next-btn");
+const calMonthYear = document.getElementById("cal-month-year");
+const calDaysGrid = document.getElementById("cal-days-grid");
+const calSelectedDateText = document.getElementById("cal-selected-date-text");
+const availabilityForm = document.getElementById("availability-form");
+const availDateInput = document.getElementById("avail-date-input");
+const availTitle = document.getElementById("avail-title");
+const availStart = document.getElementById("avail-start");
+const availEnd = document.getElementById("avail-end");
+const dateSlotsList = document.getElementById("date-slots-list");
 
 // Toast Notification Utility
 function showToast(message, type = "info", duration = 4000) {
@@ -668,6 +682,7 @@ function handleAuthSuccess(authData) {
   localStorage.setItem("token", authData.access_token);
   renderDashboard(authData.user);
   loadDatabaseUsers();
+  loadAvailabilities();
 }
 
 // Dashboard Rendering
@@ -845,6 +860,7 @@ async function checkExistingSession() {
       state.currentUser = user;
       renderDashboard(user);
       loadDatabaseUsers();
+      loadAvailabilities();
     } else {
       localStorage.removeItem("token");
       state.token = null;
@@ -898,3 +914,162 @@ switchTab("login");
 checkEmailVerificationParam();
 checkPasswordResetParam();
 checkExistingSession();
+
+// ==================== CALENDAR AVAILABILITY ====================
+async function loadAvailabilities() {
+  if (!state.token) return;
+  try {
+    const res = await fetch("/api/availability", {
+      headers: { Authorization: `Bearer ${state.token}` }
+    });
+    if (res.ok) {
+      state.userAvailabilities = await res.json();
+      renderCalendar();
+      if (state.selectedDateStr) renderSlotsForDate(state.selectedDateStr);
+    }
+  } catch (e) {
+    console.error("Failed to load availabilities", e);
+  }
+}
+
+function renderCalendar() {
+  if (!calDaysGrid) return;
+  const year = state.currentCalDate.getFullYear();
+  const month = state.currentCalDate.getMonth();
+
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  calMonthYear.textContent = `${monthNames[month]} ${year}`;
+
+  calDaysGrid.innerHTML = "";
+
+  const firstDayIndex = new Date(year, month, 1).getDay();
+  const totalDays = new Date(year, month + 1, 0).getDate();
+
+  for (let i = 0; i < firstDayIndex; i++) {
+    const emptyCell = document.createElement("div");
+    emptyCell.className = "cal-day-cell disabled";
+    calDaysGrid.appendChild(emptyCell);
+  }
+
+  for (let day = 1; day <= totalDays; day++) {
+    const cell = document.createElement("div");
+    cell.className = "cal-day-cell";
+    cell.textContent = day;
+
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+    if (state.userAvailabilities.some((a) => a.date === dateStr)) {
+      cell.classList.add("has-slots");
+    }
+    if (state.selectedDateStr === dateStr) {
+      cell.classList.add("selected");
+    }
+
+    cell.addEventListener("click", () => {
+      document.querySelectorAll(".cal-day-cell").forEach((c) => c.classList.remove("selected"));
+      cell.classList.add("selected");
+      selectCalendarDate(dateStr);
+    });
+
+    calDaysGrid.appendChild(cell);
+  }
+}
+
+function selectCalendarDate(dateStr) {
+  state.selectedDateStr = dateStr;
+  availDateInput.value = dateStr;
+  availabilityForm.classList.remove("hidden");
+
+  const [y, m, d] = dateStr.split("-");
+  calSelectedDateText.textContent = `Slots for ${new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  renderSlotsForDate(dateStr);
+}
+
+function renderSlotsForDate(dateStr) {
+  const slots = state.userAvailabilities.filter((a) => a.date === dateStr);
+  if (slots.length === 0) {
+    dateSlotsList.innerHTML = `<p class="cal-empty-slots">No slots scheduled for this day.</p>`;
+    return;
+  }
+
+  dateSlotsList.innerHTML = slots
+    .map(
+      (s) => `
+      <div class="slot-item">
+        <div>
+          <strong>${escapeHtml(s.title)}</strong>
+          <div style="color: var(--text-muted); font-size: 0.72rem;">${s.start_time.slice(0, 5)} - ${s.end_time.slice(0, 5)}</div>
+        </div>
+        <button class="btn-del-slot" onclick="deleteSlot(${s.id})" title="Delete Slot">&times;</button>
+      </div>
+    `
+    )
+    .join("");
+}
+
+window.deleteSlot = async function (slotId) {
+  try {
+    const res = await fetch(`/api/availability/${slotId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${state.token}` }
+    });
+    if (!res.ok) throw new Error("Could not delete slot");
+    showToast("Availability slot removed", "info");
+    await loadAvailabilities();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+};
+
+if (availabilityForm) {
+  availabilityForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const dateVal = availDateInput.value;
+    const startTime = availStart.value;
+    const endTime = availEnd.value;
+    const titleVal = availTitle.value.trim() || "Available";
+
+    if (startTime >= endTime) {
+      showToast("Start time must be before end time.", "error");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/availability", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${state.token}`
+        },
+        body: JSON.stringify({
+          date: dateVal,
+          start_time: startTime + ":00",
+          end_time: endTime + ":00",
+          title: titleVal
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to add slot");
+
+      showToast("Slot added!", "success");
+      await loadAvailabilities();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  });
+}
+
+if (calPrevBtn) {
+  calPrevBtn.addEventListener("click", () => {
+    state.currentCalDate.setMonth(state.currentCalDate.getMonth() - 1);
+    renderCalendar();
+  });
+}
+
+if (calNextBtn) {
+  calNextBtn.addEventListener("click", () => {
+    state.currentCalDate.setMonth(state.currentCalDate.getMonth() + 1);
+    renderCalendar();
+  });
+}

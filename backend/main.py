@@ -1,10 +1,19 @@
 import shutil
 import uuid
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile, status
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,18 +31,18 @@ from backend.auth import (
     verify_password,
     verify_password_reset_token,
 )
-from backend.database import get_db, initialize_database
-from backend.models import User
+from backend.database import Base, engine, get_db
+from backend.models import User, Availability
 from backend.schemas import (
+    AvailabilityCreate,
+    AvailabilityResponse,
     ForgotPasswordRequest,
     MessageResponse,
-    ProfileUpdate,
     ResendVerificationRequest,
     ResetPasswordRequest,
     TokenResponse,
     UserCreate,
     UserLogin,
-    UserProfileResponse,
     UserResponse,
 )
 
@@ -44,14 +53,14 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    initialize_database()
+    Base.metadata.create_all(bind=engine)
     yield
 
 
 app = FastAPI(
     title="User Authentication API",
     description="FastAPI backend with SQLite database, secure password hashing, and email verification",
-    version="1.1.0",
+    version="1.2.0",
     lifespan=lifespan,
 )
 
@@ -75,18 +84,14 @@ def signup(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    existing_user_by_username = (
-        db.query(User).filter(User.username == user_in.username).first()
-    )
+    existing_user_by_username = db.query(User).filter(User.username == user_in.username).first()
     if existing_user_by_username:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A user with this username already exists.",
         )
 
-    existing_user_by_email = (
-        db.query(User).filter(User.email == user_in.email).first()
-    )
+    existing_user_by_email = db.query(User).filter(User.email == user_in.email).first()
     if existing_user_by_email:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -108,6 +113,7 @@ def signup(
 
     verify_token = create_verification_token(new_user.email)
     background_tasks.add_task(send_verification_email, new_user.email, verify_token)
+
     return MessageResponse(
         message="Registration successful. Please check your email to verify your account before logging in."
     )
@@ -170,11 +176,7 @@ def resend_verification(
 )
 def login(login_in: UserLogin, db: Session = Depends(get_db)):
     identifier = login_in.identifier.strip().lower()
-    user = (
-        db.query(User)
-        .filter((User.email == identifier) | (User.username == identifier))
-        .first()
-    )
+    user = db.query(User).filter((User.email == identifier) | (User.username == identifier)).first()
     if not user or not verify_password(login_in.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -252,12 +254,22 @@ def reset_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password reset token is invalid or has expired.",
         )
+
     user.hashed_password = hash_password(request.password)
     user.is_verified = True
     db.commit()
     return MessageResponse(
         message="Your password has been successfully reset. You can now log in."
     )
+
+
+@app.get(
+    "/api/auth/me",
+    response_model=UserResponse,
+    summary="Get profile of currently logged-in user",
+)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 
 @app.post(
@@ -276,34 +288,97 @@ def upload_avatar(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid image format. Allowed formats: JPEG, PNG, WEBP, GIF.",
         )
+
     ext = Path(file.filename or "").suffix.lower()
     if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
         ext = ".png"
 
     unique_filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}{ext}"
     dest_path = UPLOAD_DIR / unique_filename
+
     with dest_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     current_user.avatar_url = f"/media/avatars/{unique_filename}"
     db.commit()
     db.refresh(current_user)
+
     return current_user
 
 
+# --- Availability Endpoints ---
 @app.get(
-    "/api/auth/me",
-    response_model=UserResponse,
-    summary="Get profile of currently logged-in user",
+    "/api/availability",
+    response_model=List[AvailabilityResponse],
+    summary="Get current user availability slots",
 )
-def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+def get_user_availability(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Availability).filter(Availability.user_id == current_user.id)
+    if start_date:
+        query = query.filter(Availability.date >= start_date)
+    if end_date:
+        query = query.filter(Availability.date <= end_date)
+    return query.order_by(Availability.date.asc(), Availability.start_time.asc()).all()
+
+
+@app.post(
+    "/api/availability",
+    response_model=AvailabilityResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add an availability slot",
+)
+def add_availability(
+    slot_in: AvailabilityCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    slot = Availability(
+        user_id=current_user.id,
+        date=slot_in.date,
+        start_time=slot_in.start_time,
+        end_time=slot_in.end_time,
+        title=slot_in.title or "Available",
+    )
+    db.add(slot)
+    db.commit()
+    db.refresh(slot)
+    return slot
+
+
+@app.delete(
+    "/api/availability/{slot_id}",
+    response_model=MessageResponse,
+    summary="Delete an availability slot",
+)
+def delete_availability(
+    slot_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    slot = (
+        db.query(Availability)
+        .filter(Availability.id == slot_id, Availability.user_id == current_user.id)
+        .first()
+    )
+    if not slot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Availability slot not found.",
+        )
+    db.delete(slot)
+    db.commit()
+    return MessageResponse(message="Availability slot deleted successfully.")
 
 
 @app.get(
     "/api/users",
     response_model=List[UserResponse],
-    summary="List registered users (for database demo purposes)",
+    summary="List registered users",
 )
 def list_users(db: Session = Depends(get_db)):
     return db.query(User).order_by(User.id.desc()).all()
@@ -324,52 +399,3 @@ def index():
     return {
         "message": "User Auth API is running. Access /docs for interactive Swagger documentation."
     }
-
-
-@app.get(
-    "/api/users/profile",
-    response_model=UserProfileResponse,
-    summary="Retrieve current logged-in user profile",
-)
-def get_user_profile(current_user: User = Depends(get_current_user)):
-    return current_user
-
-
-@app.put(
-    "/api/users/profile",
-    response_model=UserProfileResponse,
-    summary="Update or complete user profile",
-)
-def update_user_profile(
-    profile_data: ProfileUpdate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if profile_data.profile_picture is not None:
-        current_user.profile_picture = profile_data.profile_picture
-    if profile_data.display_name is not None:
-        current_user.display_name = profile_data.display_name
-    if profile_data.general_location is not None:
-        current_user.general_location = profile_data.general_location
-    if profile_data.activity_interests is not None:
-        current_user.activity_interests = profile_data.activity_interests
-    if profile_data.bio is not None:
-        current_user.bio = profile_data.bio
-
-    db.commit()
-    db.refresh(current_user)
-    return current_user
-
-
-@app.delete(
-    "/api/users/profile",
-    response_model=MessageResponse,
-    summary="Delete user account and profile record",
-)
-def delete_user_profile(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    db.delete(current_user)
-    db.commit()
-    return MessageResponse(message="User profile and account successfully deleted.")

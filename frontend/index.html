@@ -462,6 +462,68 @@
         </button>
       </div>
 
+      <!-- Calendar Availability Section -->
+      <div class="calendar-section">
+        <div class="calendar-header">
+          <div>
+            <h3>My Calendar Availability</h3>
+            <p>Select dates and schedule your open hours</p>
+          </div>
+          <div class="calendar-nav">
+            <button id="cal-prev-btn" class="btn-refresh" title="Previous Month">&larr;</button>
+            <span id="cal-month-year" class="cal-month-title">Month Year</span>
+            <button id="cal-next-btn" class="btn-refresh" title="Next Month">&rarr;</button>
+          </div>
+        </div>
+
+        <div class="calendar-layout">
+          <div class="calendar-card">
+            <div class="cal-grid-weekdays">
+              <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+            </div>
+            <div id="cal-days-grid" class="cal-grid-days"></div>
+          </div>
+
+          <div class="availability-sidebar">
+            <h4 id="cal-selected-date-text">Select a date</h4>
+            
+            <form id="availability-form" class="hidden">
+              <input type="hidden" id="avail-date-input" />
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label for="avail-title">Label / Activity</label>
+                <div class="input-wrapper">
+                  <input type="text" id="avail-title" placeholder="e.g. Office Hours, Mentoring" value="Available" required />
+                </div>
+              </div>
+              <div class="form-row" style="gap: 0.5rem; margin-bottom: 0.75rem;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="avail-start">Start Time</label>
+                  <div class="input-wrapper">
+                    <input type="time" id="avail-start" value="09:00" required />
+                  </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="avail-end">End Time</label>
+                  <div class="input-wrapper">
+                    <input type="time" id="avail-end" value="17:00" required />
+                  </div>
+                </div>
+              </div>
+              <button type="submit" id="btn-add-slot" class="btn-primary" style="padding: 0.6rem; font-size: 0.85rem;">
+                + Add Time Slot
+              </button>
+            </form>
+
+            <div class="slots-container">
+              <h5>Scheduled Slots</h5>
+              <div id="date-slots-list" class="slots-list">
+                <p class="cal-empty-slots">No slots for this date.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <div class="dashboard-grid">
         <!-- User Profile Info -->
         <div class="info-card">
