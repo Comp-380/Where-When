@@ -1075,3 +1075,78 @@ if (calNextBtn) {
     renderCalendar();
   });
 }
+
+// ==================== EDIT & DELETE PROFILE ====================
+const btnToggleEditProfile = document.getElementById("btn-toggle-edit-profile");
+const editProfileForm = document.getElementById("edit-profile-form");
+const btnCancelEdit = document.getElementById("btn-cancel-edit");
+const editFullname = document.getElementById("edit-fullname");
+const editUsername = document.getElementById("edit-username");
+const btnDeleteAccount = document.getElementById("btn-delete-account");
+
+if (btnToggleEditProfile) {
+  btnToggleEditProfile.addEventListener("click", () => {
+    if (state.currentUser) {
+      editFullname.value = state.currentUser.full_name || "";
+      editUsername.value = state.currentUser.username || "";
+      editProfileForm.classList.toggle("hidden");
+    }
+  });
+}
+
+if (btnCancelEdit) {
+  btnCancelEdit.addEventListener("click", () => {
+    editProfileForm.classList.add("hidden");
+  });
+}
+
+if (editProfileForm) {
+  editProfileForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${state.token}`,
+        },
+        body: JSON.stringify({
+          full_name: editFullname.value.trim(),
+          username: editUsername.value.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to update profile.");
+
+      state.currentUser = data;
+      renderDashboard(data);
+      editProfileForm.classList.add("hidden");
+      showToast("Profile updated successfully!", "success");
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  });
+}
+
+if (btnDeleteAccount) {
+  btnDeleteAccount.addEventListener("click", async () => {
+    const confirmed = confirm("Are you sure you want to permanently delete your account?");
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch("/api/users/me", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${state.token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to delete account.");
+
+      showToast("Account deleted.", "info");
+      btnLogout.click();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  });
+}

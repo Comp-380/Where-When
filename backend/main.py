@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 from typing import List, Optional
 
+
 from fastapi import (
     BackgroundTasks,
     Depends,
@@ -44,6 +45,7 @@ from backend.schemas import (
     UserCreate,
     UserLogin,
     UserResponse,
+    UserUpdate,
 )
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -270,6 +272,46 @@ def reset_password(
 )
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@app.patch(
+    "/api/users/me",
+    response_model=UserResponse,
+    summary="Update current user profile",
+)
+def update_profile(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if user_update.username and user_update.username != current_user.username:
+        existing = db.query(User).filter(User.username == user_update.username).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username is already taken.",
+            )
+        current_user.username = user_update.username
+
+    if user_update.full_name is not None:
+        current_user.full_name = user_update.full_name
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@app.delete(
+    "/api/users/me",
+    response_model=MessageResponse,
+    summary="Delete current user account",
+)
+def delete_account(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    db.delete(current_user)
+    db.commit()
+    return MessageResponse(message="Account successfully deleted.")
 
 
 @app.post(

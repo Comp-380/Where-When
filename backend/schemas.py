@@ -50,6 +50,11 @@ class UserCreate(BaseModel):
         return self
 
 
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = Field(None, max_length=100)
+    username: Optional[str] = Field(None, min_length=3, max_length=30)
+
+
 class UserLogin(BaseModel):
     identifier: str = Field(..., description="Email or Username")
     password: str = Field(..., min_length=1, description="Account password")
