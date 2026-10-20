@@ -124,6 +124,18 @@ class ResetPasswordRequest(BaseModel):
             raise ValueError("Passwords do not match.")
         return self
 
+<<<<<<< HEAD
+=======
+
+class ProfileUpdate(BaseModel):
+    profile_picture: Optional[str] = None
+    display_name: Optional[str] = None
+    general_location: Optional[str] = None
+    activity_interests: Optional[str] = None
+    bio: Optional[str] = None
+
+
+>>>>>>> 64d6eb4eff64902556c62e5f814dbf36454c4fb5
 class UserProfileResponse(BaseModel):
     id: int
     username: str
