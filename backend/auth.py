@@ -22,6 +22,7 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production-su
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 VERIFY_TOKEN_EXPIRE_HOURS = 24
+RESET_TOKEN_EXPIRE_MINUTES = int(os.getenv("RESET_TOKEN_EXPIRE_MINUTES", "60"))
 
 # SMTP Configuration
 SMTP_HOST = os.getenv("SMTP_HOST", "")
@@ -124,6 +125,86 @@ def send_verification_email(recipient_email: str, token: str):
         logger.info("SMTP server accepted verification email for %s.", recipient_email)
     except Exception as e:
         logger.error(f"Failed to send verification email to {recipient_email}: {e}")
+
+
+def create_password_reset_token(user: User) -> str:
+    """Create a scoped short-lived token for password reset with single-use invalidation."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+    payload = {
+        "sub": user.email,
+        "type": "password_reset",
+        "pwd_sig": user.hashed_password[:16],
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def verify_password_reset_token(token: str, db: Session) -> Optional[User]:
+    """Verify the password reset token and return the associated active user if valid."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "password_reset":
+            return None
+        email = payload.get("sub")
+        pwd_sig = payload.get("pwd_sig")
+        if not email or not pwd_sig:
+            return None
+    except jwt.PyJWTError:
+        return None
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not user.is_active:
+        return None
+
+    # Invalidate if password has already changed since token generation
+    if user.hashed_password[:16] != pwd_sig:
+        return None
+
+    return user
+
+
+def send_password_reset_email(recipient_email: str, token: str):
+    """Send password reset link via SMTP or print to console."""
+    reset_link = f"{APP_BASE_URL}/?reset_token={token}"
+
+    # Print directly to console for instant local development access
+    print("\n" + "=" * 60, flush=True)
+    print(f"[PASSWORD RESET LINK FOR {recipient_email}]:", flush=True)
+    print(reset_link, flush=True)
+    print("=" * 60 + "\n", flush=True)
+
+    if not SMTP_HOST:
+        return
+
+    msg = EmailMessage()
+    msg["Subject"] = "Reset Your Password"
+    msg["From"] = SMTP_FROM
+    msg["To"] = recipient_email
+    msg.set_content(
+        f"Hello,\n\nWe received a request to reset your password. You can reset it by clicking the link below:\n\n{reset_link}\n\n"
+        f"This link expires in {RESET_TOKEN_EXPIRE_MINUTES} minutes.\n\n"
+        f"If you did not request a password reset, please ignore this email and your password will remain unchanged."
+    )
+
+    context = ssl.create_default_context()
+
+    try:
+        if SMTP_PORT == 465:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
+                if SMTP_USER and SMTP_PASSWORD:
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+                server.ehlo()
+                server.starttls(context=context)
+                server.ehlo()
+                if SMTP_USER and SMTP_PASSWORD:
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                server.send_message(msg)
+    except Exception as e:
+        logger.error(f"Failed to send password reset email to {recipient_email}: {e}")
 
 
 def get_current_user(

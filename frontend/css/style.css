@@ -87,61 +87,17 @@ body {
   z-index: 1;
 }
 
-/* Header */
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* Standalone Title positioned above the card container */
+.portal-main-title {
+  font-size: 2.15rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  text-align: center;
   margin-bottom: 1.5rem;
-  padding: 0 0.5rem;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.brand-icon {
-  background: linear-gradient(135deg, #6366f1, #a855f7);
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
-}
-
-.brand-name {
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  background: linear-gradient(to right, #ffffff, #cbd5e1);
+  background: linear-gradient(135deg, #ffffff 40%, #a5b4fc 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-}
-
-.system-status {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.2);
-  padding: 0.35rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: #34d399;
-}
-
-.status-indicator {
-  width: 7px;
-  height: 7px;
-  background-color: #10b981;
-  border-radius: 50%;
-  box-shadow: 0 0 8px #10b981;
+  filter: drop-shadow(0 2px 10px rgba(99, 102, 241, 0.2));
 }
 
 /* Auth Card */
@@ -214,10 +170,11 @@ body {
 
 .panel-header {
   margin-bottom: 1.5rem;
+  text-align: center;
 }
 
 .panel-header h2 {
-  font-size: 1.45rem;
+  font-size: 1.35rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   margin-bottom: 0.4rem;
@@ -253,6 +210,28 @@ body {
   font-weight: 600;
   margin-bottom: 0.45rem;
   color: var(--text-secondary);
+}
+
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.45rem;
+}
+
+.label-row label {
+  margin-bottom: 0;
+}
+
+.link-forgot {
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-decoration: none;
+  padding: 0;
+}
+
+.link-forgot:hover {
+  text-decoration: underline;
 }
 
 .req {
@@ -400,10 +379,6 @@ body {
 .req-bullet {
   font-size: 0.75rem;
   font-weight: 700;
-}
-
-.req-item.met .req-bullet {
-  content: '✓';
 }
 
 /* Terms Checkbox */
@@ -577,6 +552,45 @@ body {
   font-size: 1.35rem;
   font-weight: 700;
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.avatar-wrapper {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.avatar-wrapper .avatar-circle {
+  width: 100%;
+  height: 100%;
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.avatar-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  cursor: pointer;
+}
+
+.avatar-wrapper:hover .avatar-overlay {
+  opacity: 1;
 }
 
 .user-handle {
@@ -806,6 +820,63 @@ body {
   text-align: center;
   padding: 1.5rem;
   color: var(--text-muted);
+}
+
+/* Relocated Footer (SecureAuth & FastAPI Status below fields/cards) */
+.app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1.5rem;
+  padding: 0 0.5rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.brand-icon {
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+}
+
+.brand-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(to right, #ffffff, #cbd5e1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.system-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #34d399;
+}
+
+.status-indicator {
+  width: 7px;
+  height: 7px;
+  background-color: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #10b981;
 }
 
 /* Toast Notifications */

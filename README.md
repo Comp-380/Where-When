@@ -12,12 +12,16 @@ A modern, full-stack user registration and authentication web application built 
   - **Security Best Practices**:
     - Passwords securely hashed with **Bcrypt** (12 salt rounds, one-way hash).
     - **JWT (JSON Web Token)** authentication (`Bearer` tokens with 24-hour expiration).
+    - Scoped email verification tokens (24h expiry) and single-use password reset tokens (60m expiry).
+    - Single-use invalidation on password reset tokens by fingerprinting active password hash.
+    - Anti-enumeration protection on verification and password reset requests.
     - Case-insensitive unique username and email constraints.
   - **Input Validation**: Pydantic schemas validating email format, username restrictions, and password strength policies.
 
 - **Frontend**:
-  - **Dual Mode Views**: Seamless tabbed navigation between **Create Account** and **Sign In**.
+  - **Multi-Mode Views**: Seamless navigation between **Create Account**, **Sign In**, **Forgot Password**, and **Reset Password**.
   - **Live Password Strength Meter**: 5-point evaluation (length, uppercase, lowercase, numbers, special characters) with real-time animated visual bar and checklist.
+  - **Email Verification & Password Reset Flows**: Token verification via URL parameters (`?token=...` or `?reset_token=...`), resend verification option, and dedicated password reset form.
   - **Real-Time Validation**: Instant feedback for email format, username validity, and matching confirm-password.
   - **User Dashboard & Database Viewer**:
     - Welcome hero screen displaying profile metadata and active session details.
@@ -34,17 +38,17 @@ A modern, full-stack user registration and authentication web application built 
 │   ├── auth.py          # Bcrypt hashing, JWT issuance & token verification
 │   ├── database.py      # SQLite connection & SQLAlchemy session management
 │   ├── models.py        # Database models (User entity)
-│   ├── schemas.py       # Pydantic validation models (UserCreate, UserLogin, UserResponse)
+│   ├── schemas.py       # Pydantic validation models (UserCreate, UserLogin, UserResponse, etc.)
 │   └── main.py          # FastAPI application, route handlers & static file serving
 ├── frontend/
-│   ├── index.html       # Web portal markup (Signup, Login, Dashboard)
+│   ├── index.html       # Web portal markup (Signup, Login, Forgot & Reset Password, Dashboard)
 │   ├── css/
 │   │   └── style.css    # Responsive styles, dark mode UI, password meter
 │   └── js/
-│       └── app.js       # Client validation, API requests, session handling
+│       └── app.js       # Client validation, API requests, session & reset handling
 ├── tests/
 │   ├── __init__.py
-│   └── test_auth.py     # Automated test suite (Signup, Login, Hashing, In-memory DB)
+│   └── test_auth.py     # Automated test suite (Signup, Login, Email Verification, Password Reset)
 ├── requirements.txt     # Python package dependencies
 ├── pytest.ini          # Test runner configuration
 ├── run.py               # Application entrypoint script
@@ -118,6 +122,9 @@ pytest -v
 
 The test suite runs against an isolated, high-speed in-memory SQLite database verifying:
 - Successful account registration and database persistence
+- Email verification flow and unverified login prevention
+- Resend verification link behavior
+- Password reset request, token validation, password update, and single-use invalidation
 - Bcrypt password hash verification
 - Duplicate email and username conflict handling (HTTP 409)
 - Weak password and malformed email validation errors (HTTP 422)
@@ -130,7 +137,12 @@ The test suite runs against an isolated, high-speed in-memory SQLite database ve
 
 | Method | Endpoint | Description | Protected |
 |--------|----------|-------------|-----------|
-| `POST` | `/api/auth/signup` | Register a new user and receive a JWT token | No |
+| `POST` | `/api/auth/signup` | Register a new user account (sends email verification) | No |
+| `GET`  | `/api/auth/verify` | Verify user email address with token | No |
+| `POST` | `/api/auth/resend-verification` | Resend verification email link | No |
+| `POST` | `/api/auth/forgot-password` | Request password reset link via email | No |
+| `GET`  | `/api/auth/verify-reset-token` | Verify password reset token validity | No |
+| `POST` | `/api/auth/reset-password` | Reset password using verified token | No |
 | `POST` | `/api/auth/login` | Log in with username/email and password | No |
 | `GET`  | `/api/auth/me` | Fetch authenticated user's profile | **Yes (Bearer)** |
 | `GET`  | `/api/users` | List registered users from SQLite database | No (Demo) |

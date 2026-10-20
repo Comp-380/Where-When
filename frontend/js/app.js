@@ -7,12 +7,20 @@ const state = {
 // DOM Elements
 const authSection = document.getElementById("auth-section");
 const dashboardSection = document.getElementById("dashboard-section");
+
+// Tab / View Elements
 const tabSignupBtn = document.getElementById("tab-signup-btn");
 const tabLoginBtn = document.getElementById("tab-login-btn");
 const signupView = document.getElementById("signup-view");
 const loginView = document.getElementById("login-view");
+const forgotView = document.getElementById("forgot-view");
+const resetView = document.getElementById("reset-view");
+
 const linkToLogin = document.getElementById("link-to-login");
 const linkToSignup = document.getElementById("link-to-signup");
+const btnForgotPassword = document.getElementById("btn-forgot-password");
+const linkFpToLogin = document.getElementById("link-fp-to-login");
+const linkRpToLogin = document.getElementById("link-rp-to-login");
 
 // Signup Form Elements
 const signupForm = document.getElementById("signup-form");
@@ -27,7 +35,7 @@ const valIconUsername = document.getElementById("val-icon-username");
 const valIconEmail = document.getElementById("val-icon-email");
 const confirmMatchHint = document.getElementById("confirm-match-hint");
 
-// Password Meter & Requirements Elements
+// Password Meter & Requirements Elements (Signup)
 const passwordMeterFill = document.getElementById("password-meter-fill");
 const passwordStrengthText = document.getElementById("password-strength-text");
 const reqLen = document.getElementById("req-len");
@@ -44,7 +52,30 @@ const btnLogin = document.getElementById("btn-login");
 const resendSection = document.getElementById("resend-section");
 const btnResendVerification = document.getElementById("btn-resend-verification");
 
+// Forgot Password Elements
+const forgotForm = document.getElementById("forgot-form");
+const fpEmail = document.getElementById("fp-email");
+const valIconFpEmail = document.getElementById("val-icon-fp-email");
+const btnForgot = document.getElementById("btn-forgot");
+
+// Reset Password Elements
+const resetForm = document.getElementById("reset-form");
+const rpToken = document.getElementById("rp-token");
+const rpPassword = document.getElementById("rp-password");
+const rpConfirmPassword = document.getElementById("rp-confirm-password");
+const rpPasswordMeterFill = document.getElementById("rp-password-meter-fill");
+const rpPasswordStrengthText = document.getElementById("rp-password-strength-text");
+const rpReqLen = document.getElementById("rp-req-len");
+const rpReqUpper = document.getElementById("rp-req-upper");
+const rpReqLower = document.getElementById("rp-req-lower");
+const rpReqNum = document.getElementById("rp-req-num");
+const rpReqSpecial = document.getElementById("rp-req-special");
+const rpConfirmMatchHint = document.getElementById("rp-confirm-match-hint");
+const btnReset = document.getElementById("btn-reset");
+
 // Dashboard Elements
+const dashAvatarImg = document.getElementById("dash-avatar-img");
+const avatarInput = document.getElementById("avatar-input");
 const dashAvatar = document.getElementById("dash-avatar");
 const dashGreetingName = document.getElementById("dash-greeting-name");
 const dashGreetingHandle = document.getElementById("dash-greeting-handle");
@@ -56,6 +87,7 @@ const dashJoined = document.getElementById("dash-joined");
 const dbUsersTbody = document.getElementById("db-users-tbody");
 const btnRefreshUsers = document.getElementById("btn-refresh-users");
 const btnLogout = document.getElementById("btn-logout");
+
 const toastContainer = document.getElementById("toast-container");
 
 // Toast Notification Utility
@@ -73,22 +105,30 @@ function showToast(message, type = "info", duration = 4000) {
   }, duration);
 }
 
-// Tab Switching
+// Tab Switching (Default tab: login)
 function switchTab(target) {
+  signupView.classList.remove("active");
+  loginView.classList.remove("active");
+  if (forgotView) forgotView.classList.remove("active");
+  if (resetView) resetView.classList.remove("active");
+
+  tabSignupBtn.classList.remove("active");
+  tabSignupBtn.setAttribute("aria-selected", "false");
+  tabLoginBtn.classList.remove("active");
+  tabLoginBtn.setAttribute("aria-selected", "false");
+
   if (target === "signup") {
     tabSignupBtn.classList.add("active");
     tabSignupBtn.setAttribute("aria-selected", "true");
-    tabLoginBtn.classList.remove("active");
-    tabLoginBtn.setAttribute("aria-selected", "false");
     signupView.classList.add("active");
-    loginView.classList.remove("active");
-  } else {
+  } else if (target === "login") {
     tabLoginBtn.classList.add("active");
     tabLoginBtn.setAttribute("aria-selected", "true");
-    tabSignupBtn.classList.remove("active");
-    tabSignupBtn.setAttribute("aria-selected", "false");
     loginView.classList.add("active");
-    signupView.classList.remove("active");
+  } else if (target === "forgot") {
+    if (forgotView) forgotView.classList.add("active");
+  } else if (target === "reset") {
+    if (resetView) resetView.classList.add("active");
   }
 }
 
@@ -96,6 +136,20 @@ tabSignupBtn.addEventListener("click", () => switchTab("signup"));
 tabLoginBtn.addEventListener("click", () => switchTab("login"));
 linkToLogin.addEventListener("click", () => switchTab("login"));
 linkToSignup.addEventListener("click", () => switchTab("signup"));
+
+if (btnForgotPassword) {
+  btnForgotPassword.addEventListener("click", () => {
+    const currentId = liIdentifier.value.trim();
+    if (currentId.includes("@") && fpEmail) {
+      fpEmail.value = currentId;
+      validateFpEmail(currentId);
+    }
+    switchTab("forgot");
+  });
+}
+
+if (linkFpToLogin) linkFpToLogin.addEventListener("click", () => switchTab("login"));
+if (linkRpToLogin) linkRpToLogin.addEventListener("click", () => switchTab("login"));
 
 // Password Visibility Toggles
 document.querySelectorAll(".toggle-password").forEach((button) => {
@@ -223,7 +277,7 @@ function updateReqItem(element, isMet) {
     bullet.textContent = "✓";
   } else {
     element.classList.remove("met");
-    bullet.textContent = "•";
+    bullet.textContent = "○";
   }
 }
 
@@ -262,7 +316,7 @@ suPassword.addEventListener("input", (e) => {
 });
 suConfirmPassword.addEventListener("input", checkPasswordMatch);
 
-// Signup Form Submit Handler (Does NOT auto-login; prompts to verify email)
+// Signup Form Submit Handler
 signupForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -365,7 +419,6 @@ loginForm.addEventListener("submit", async (e) => {
     const data = await response.json();
 
     if (!response.ok) {
-      // Unverified account handling
       if (response.status === 403 && data.detail && data.detail.toLowerCase().includes("verify")) {
         showToast(data.detail, "error", 7000);
         if (resendSection) resendSection.classList.remove("hidden");
@@ -409,11 +462,231 @@ if (btnResendVerification) {
   });
 }
 
+// Live Validation for Forgot Password Email
+function validateFpEmail(value) {
+  const clean = value.trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const valid = emailRegex.test(clean);
+
+  if (!clean) {
+    fpEmail.classList.remove("valid-input", "invalid-input");
+    valIconFpEmail.textContent = "";
+    return false;
+  }
+
+  if (valid) {
+    fpEmail.classList.add("valid-input");
+    fpEmail.classList.remove("invalid-input");
+    valIconFpEmail.textContent = "✓";
+    valIconFpEmail.style.color = "#10b981";
+  } else {
+    fpEmail.classList.add("invalid-input");
+    fpEmail.classList.remove("valid-input");
+    valIconFpEmail.textContent = "✕";
+    valIconFpEmail.style.color = "#ef4444";
+  }
+  return valid;
+}
+
+if (fpEmail) {
+  fpEmail.addEventListener("input", (e) => validateFpEmail(e.target.value));
+}
+
+// Forgot Password Form Submit Handler
+if (forgotForm) {
+  forgotForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = fpEmail.value.trim();
+
+    if (!validateFpEmail(email)) {
+      showToast("Please enter a valid email address.", "error");
+      fpEmail.focus();
+      return;
+    }
+
+    setButtonLoading(btnForgot, true);
+
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to request password reset.");
+      }
+
+      showToast(
+        data.message || "If an account with this email exists, a password reset link has been sent.",
+        "success",
+        7000
+      );
+      forgotForm.reset();
+      fpEmail.classList.remove("valid-input", "invalid-input");
+      valIconFpEmail.textContent = "";
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setButtonLoading(btnForgot, false);
+    }
+  });
+}
+
+// Live Evaluation for Reset Password
+function evaluateResetPassword(pwd) {
+  const hasLen = pwd.length >= 8;
+  const hasUpper = /[A-Z]/.test(pwd);
+  const hasLower = /[a-z]/.test(pwd);
+  const hasNum = /\d/.test(pwd);
+  const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(pwd);
+
+  updateReqItem(rpReqLen, hasLen);
+  updateReqItem(rpReqUpper, hasUpper);
+  updateReqItem(rpReqLower, hasLower);
+  updateReqItem(rpReqNum, hasNum);
+  updateReqItem(rpReqSpecial, hasSpecial);
+
+  const checks = [hasLen, hasUpper, hasLower, hasNum, hasSpecial];
+  const passedCount = checks.filter(Boolean).length;
+
+  let width = "0%";
+  let color = "#ef4444";
+  let label = "Too short";
+
+  if (pwd.length === 0) {
+    width = "0%";
+    label = "Too short";
+  } else if (passedCount <= 2) {
+    width = "25%";
+    color = "#ef4444";
+    label = "Weak";
+  } else if (passedCount === 3) {
+    width = "50%";
+    color = "#f59e0b";
+    label = "Fair";
+  } else if (passedCount === 4) {
+    width = "75%";
+    color = "#3b82f6";
+    label = "Good";
+  } else if (passedCount === 5) {
+    width = "100%";
+    color = "#10b981";
+    label = "Strong";
+  }
+
+  rpPasswordMeterFill.style.width = width;
+  rpPasswordMeterFill.style.backgroundColor = color;
+  rpPasswordStrengthText.textContent = label;
+  rpPasswordStrengthText.style.color = color;
+
+  return passedCount === 5;
+}
+
+function checkResetPasswordMatch() {
+  const pwd = rpPassword.value;
+  const confirm = rpConfirmPassword.value;
+
+  if (!confirm) {
+    rpConfirmMatchHint.textContent = "";
+    rpConfirmMatchHint.className = "field-hint";
+    rpConfirmPassword.classList.remove("valid-input", "invalid-input");
+    return false;
+  }
+
+  if (pwd === confirm) {
+    rpConfirmMatchHint.textContent = "✓ Passwords match";
+    confirmMatchHint.className = "field-hint success";
+    rpConfirmPassword.classList.add("valid-input");
+    rpConfirmPassword.classList.remove("invalid-input");
+    return true;
+  } else {
+    rpConfirmMatchHint.textContent = "✕ Passwords do not match";
+    rpConfirmMatchHint.className = "field-hint error";
+    rpConfirmPassword.classList.add("invalid-input");
+    rpConfirmPassword.classList.remove("valid-input");
+    return false;
+  }
+}
+
+if (rpPassword) {
+  rpPassword.addEventListener("input", (e) => {
+    evaluateResetPassword(e.target.value);
+    if (rpConfirmPassword && rpConfirmPassword.value) checkResetPasswordMatch();
+  });
+}
+
+if (rpConfirmPassword) {
+  rpConfirmPassword.addEventListener("input", checkResetPasswordMatch);
+}
+
+// Reset Password Form Submit Handler
+if (resetForm) {
+  resetForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const token = rpToken.value.trim();
+    const password = rpPassword.value;
+    const confirmPassword = rpConfirmPassword.value;
+
+    if (!token) {
+      showToast("Reset token is missing. Please use the link sent to your email.", "error");
+      return;
+    }
+    if (!evaluateResetPassword(password)) {
+      showToast("Password does not meet all security requirements.", "error");
+      rpPassword.focus();
+      return;
+    }
+    if (password !== confirmPassword) {
+      showToast("Passwords do not match.", "error");
+      rpConfirmPassword.focus();
+      return;
+    }
+
+    setButtonLoading(btnReset, true);
+
+    try {
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          password,
+          confirm_password: confirmPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Password reset failed.");
+      }
+
+      showToast(
+        data.message || "Your password has been successfully reset! You can now log in.",
+        "success",
+        7000
+      );
+      resetForm.reset();
+      evaluateResetPassword("");
+      switchTab("login");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setButtonLoading(btnReset, false);
+    }
+  });
+}
+
 // Handle Successful Authentication
 function handleAuthSuccess(authData) {
   state.token = authData.access_token;
   state.currentUser = authData.user;
   localStorage.setItem("token", authData.access_token);
+
   renderDashboard(authData.user);
   loadDatabaseUsers();
 }
@@ -422,16 +695,25 @@ function handleAuthSuccess(authData) {
 function renderDashboard(user) {
   authSection.classList.add("hidden");
   dashboardSection.classList.remove("hidden");
-
   const displayName = user.full_name || user.username;
-  dashAvatar.textContent = (displayName[0] || "U").toUpperCase();
+
+  // Display avatar image if available, otherwise display fallback initial
+  if (user.avatar_url) {
+    dashAvatarImg.src = user.avatar_url;
+    dashAvatarImg.classList.remove("hidden");
+    dashAvatar.classList.add("hidden");
+  } else {
+    dashAvatar.textContent = (displayName[0] || "U").toUpperCase();
+    dashAvatar.classList.remove("hidden");
+    dashAvatarImg.classList.add("hidden");
+  }
+
   dashGreetingName.textContent = `Welcome, ${displayName}!`;
   dashGreetingHandle.textContent = `@${user.username}`;
   dashId.textContent = `#${user.id}`;
   dashUsername.textContent = user.username;
   dashEmail.textContent = user.email;
   dashFullname.textContent = user.full_name || "Not provided";
-
   const dateObj = new Date(user.created_at);
   dashJoined.textContent = dateObj.toLocaleDateString("en-US", {
     year: "numeric",
@@ -445,6 +727,7 @@ function renderDashboard(user) {
 // Fetch Registered Users from Database
 async function loadDatabaseUsers() {
   dbUsersTbody.innerHTML = `<tr><td colspan="5" class="table-loading">Loading users from SQLite...</td></tr>`;
+
   try {
     const response = await fetch("/api/users");
     if (!response.ok) throw new Error("Failed to fetch database users");
@@ -464,6 +747,7 @@ async function loadDatabaseUsers() {
           hour: "2-digit",
           minute: "2-digit",
         });
+
         return `
         <tr>
           <td><strong>#${u.id}</strong></td>
@@ -482,14 +766,14 @@ async function loadDatabaseUsers() {
 
 btnRefreshUsers.addEventListener("click", loadDatabaseUsers);
 
-// Logout Handler
+// Logout Handler (Resets to Login view)
 btnLogout.addEventListener("click", () => {
   state.token = null;
   state.currentUser = null;
   localStorage.removeItem("token");
   dashboardSection.classList.add("hidden");
   authSection.classList.remove("hidden");
-  switchTab("signup");
+  switchTab("login");
   showToast("You have been signed out.", "info");
 });
 
@@ -523,12 +807,15 @@ function escapeHtml(str) {
 // Check Email Verification URL Parameter (?token=...)
 async function checkEmailVerificationParam() {
   const params = new URLSearchParams(window.location.search);
+  if (params.get("reset_token") || window.location.pathname.includes("reset-password")) return;
+
   const token = params.get("token");
   if (!token) return;
 
   try {
     const res = await fetch(`/api/auth/verify?token=${encodeURIComponent(token)}`);
     const data = await res.json();
+
     if (res.ok) {
       showToast(data.message || "Email verified! You can now sign in.", "success", 6000);
       switchTab("login");
@@ -542,9 +829,38 @@ async function checkEmailVerificationParam() {
   }
 }
 
+// Check Password Reset URL Parameter (?reset_token=... or /reset-password?token=...)
+async function checkPasswordResetParam() {
+  const params = new URLSearchParams(window.location.search);
+  const resetToken =
+    params.get("reset_token") ||
+    (window.location.pathname.includes("reset-password") ? params.get("token") : null);
+
+  if (!resetToken) return;
+
+  try {
+    const res = await fetch(`/api/auth/verify-reset-token?token=${encodeURIComponent(resetToken)}`);
+    const data = await res.json();
+
+    if (res.ok) {
+      if (rpToken) rpToken.value = resetToken;
+      showToast("Reset token verified. Please enter your new password.", "info", 5000);
+      switchTab("reset");
+    } else {
+      showToast(data.detail || "Password reset link is invalid or expired.", "error", 7000);
+      switchTab("login");
+    }
+  } catch (err) {
+    showToast("Failed to connect to verification server.", "error");
+  } finally {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
+
 // Initial Session Check
 async function checkExistingSession() {
   if (!state.token) return;
+
   try {
     const response = await fetch("/api/auth/me", {
       headers: {
@@ -562,10 +878,52 @@ async function checkExistingSession() {
       state.token = null;
     }
   } catch (e) {
-    // Leave at sign in/up screen on connection failure
+    // Leave at Sign In on connection failure
   }
 }
 
+if (avatarInput) {
+  avatarInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Image must be smaller than 5MB", "error");
+      avatarInput.value = "";
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      showToast("Uploading avatar...", "info", 2000);
+      const res = await fetch("/api/users/me/avatar", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${state.token}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to upload avatar");
+      }
+
+      state.currentUser = data;
+      renderDashboard(data);
+      showToast("Profile picture updated!", "success");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      avatarInput.value = "";
+    }
+  });
+}
+
 // Boot application
+switchTab("login");
 checkEmailVerificationParam();
+checkPasswordResetParam();
 checkExistingSession();

@@ -4,6 +4,21 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
+def validate_password_complexity(v: str) -> str:
+    """Validate that password meets security complexity rules."""
+    if len(v) < 8:
+        raise ValueError("Password must be at least 8 characters long.")
+    if not re.search(r"[a-z]", v):
+        raise ValueError("Password must contain at least one lowercase letter.")
+    if not re.search(r"[A-Z]", v):
+        raise ValueError("Password must contain at least one uppercase letter.")
+    if not re.search(r"\d", v):
+        raise ValueError("Password must contain at least one numeric digit.")
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v):
+        raise ValueError("Password must contain at least one special character (e.g. !@#$%^&*).")
+    return v
+
+
 class UserCreate(BaseModel):
     username: str = Field(
         ...,
@@ -40,17 +55,7 @@ class UserCreate(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long.")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter.")
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter.")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one numeric digit.")
-        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v):
-            raise ValueError("Password must contain at least one special character (e.g. !@#$%^&*).")
-        return v
+        return validate_password_complexity(v)
 
     @model_validator(mode="after")
     def check_passwords_match(self):
@@ -72,6 +77,7 @@ class UserResponse(BaseModel):
     is_active: bool
     is_verified: bool
     created_at: datetime
+    avatar_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -88,3 +94,46 @@ class MessageResponse(BaseModel):
 
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., description="Password reset token received via email.")
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        description="Password must be at least 8 characters long."
+    )
+    confirm_password: Optional[str] = Field(
+        None,
+        description="Password confirmation that must match the password."
+    )
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        return validate_password_complexity(v)
+
+    @model_validator(mode="after")
+    def check_passwords_match(self):
+        if self.confirm_password is not None and self.password != self.confirm_password:
+            raise ValueError("Passwords do not match.")
+        return self
+
+class UserProfileResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    full_name: Optional[str] = None
+    display_name: Optional[str] = None
+    profile_picture: Optional[str] = None
+    general_location: Optional[str] = None
+    activity_interests: Optional[str] = None
+    bio: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
