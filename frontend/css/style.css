@@ -622,7 +622,7 @@ body {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr; /* Changed from 1fr 1fr to 1fr */
   gap: 1.25rem;
   margin-bottom: 2rem;
 }

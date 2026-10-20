@@ -756,7 +756,9 @@ async function loadDatabaseUsers() {
   }
 }
 
-btnRefreshUsers.addEventListener("click", loadDatabaseUsers);
+if (btnRefreshUsers) {
+  btnRefreshUsers.addEventListener("click", loadDatabaseUsers);
+}
 
 // Logout Handler
 btnLogout.addEventListener("click", () => {
