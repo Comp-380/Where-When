@@ -25,16 +25,18 @@ from backend.auth import (
     verify_password,
     verify_password_reset_token,
 )
-from backend.database import Base, engine, get_db
+from backend.database import Base, engine, get_db, initialize_database
 from backend.models import User
 from backend.schemas import (
     ForgotPasswordRequest,
     MessageResponse,
+    ProfileUpdate,
     ResendVerificationRequest,
     ResetPasswordRequest,
     TokenResponse,
     UserCreate,
     UserLogin,
+    UserProfileResponse,
     UserResponse,
 )
 
@@ -48,7 +50,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create database tables on startup
-    Base.metadata.create_all(bind=engine)
+    initialize_database()
     yield
 
 

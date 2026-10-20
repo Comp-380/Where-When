@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import User
 
-logger = logging.getLogger("auth")
+logger = logging.getLogger("uvicorn.error.auth")
 
 # Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production-super-safe-key-12345")
@@ -90,16 +90,16 @@ def verify_email_token(token: str) -> Optional[str]:
 
 
 def send_verification_email(recipient_email: str, token: str):
-    """Send verification link via SMTP or print to console."""
+    """Send verification via SMTP and log the delivery result."""
     verification_link = f"{APP_BASE_URL}/api/auth/verify?token={token}"
 
-    # Print directly to console for instant local development access
     print("\n" + "=" * 60, flush=True)
     print(f"[VERIFICATION LINK FOR {recipient_email}]:", flush=True)
     print(verification_link, flush=True)
     print("=" * 60 + "\n", flush=True)
 
     if not SMTP_HOST:
+        logger.warning("Verification email not sent: SMTP_HOST is not configured.")
         return
 
     msg = EmailMessage()
@@ -112,10 +112,9 @@ def send_verification_email(recipient_email: str, token: str):
     )
 
     context = ssl.create_default_context()
-
     try:
         if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15, context=context) as server:
                 if SMTP_USER and SMTP_PASSWORD:
                     server.login(SMTP_USER, SMTP_PASSWORD)
                 server.send_message(msg)
@@ -127,6 +126,7 @@ def send_verification_email(recipient_email: str, token: str):
                 if SMTP_USER and SMTP_PASSWORD:
                     server.login(SMTP_USER, SMTP_PASSWORD)
                 server.send_message(msg)
+        logger.info("SMTP server accepted verification email for %s.", recipient_email)
     except Exception as e:
         logger.error(f"Failed to send verification email to {recipient_email}: {e}")
 
@@ -161,7 +161,6 @@ def verify_password_reset_token(token: str, db: Session) -> Optional[User]:
     if not user or not user.is_active:
         return None
 
-    # Invalidate if password has already changed since token generation
     if user.hashed_password[:16] != pwd_sig:
         return None
 
@@ -172,7 +171,6 @@ def send_password_reset_email(recipient_email: str, token: str):
     """Send password reset link via SMTP or print to console."""
     reset_link = f"{APP_BASE_URL}/?reset_token={token}"
 
-    # Print directly to console for instant local development access
     print("\n" + "=" * 60, flush=True)
     print(f"[PASSWORD RESET LINK FOR {recipient_email}]:", flush=True)
     print(reset_link, flush=True)
@@ -192,10 +190,9 @@ def send_password_reset_email(recipient_email: str, token: str):
     )
 
     context = ssl.create_default_context()
-
     try:
         if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15, context=context) as server:
                 if SMTP_USER and SMTP_PASSWORD:
                     server.login(SMTP_USER, SMTP_PASSWORD)
                 server.send_message(msg)
@@ -223,6 +220,7 @@ def get_current_user(
     )
     if not credentials:
         raise unauthorized_exception
+
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

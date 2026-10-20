@@ -15,7 +15,6 @@ const signupView = document.getElementById("signup-view");
 const loginView = document.getElementById("login-view");
 const forgotView = document.getElementById("forgot-view");
 const resetView = document.getElementById("reset-view");
-
 const linkToLogin = document.getElementById("link-to-login");
 const linkToSignup = document.getElementById("link-to-signup");
 const btnForgotPassword = document.getElementById("btn-forgot-password");
@@ -87,7 +86,6 @@ const dashJoined = document.getElementById("dash-joined");
 const dbUsersTbody = document.getElementById("db-users-tbody");
 const btnRefreshUsers = document.getElementById("btn-refresh-users");
 const btnLogout = document.getElementById("btn-logout");
-
 const toastContainer = document.getElementById("toast-container");
 
 // Toast Notification Utility
@@ -96,7 +94,6 @@ function showToast(message, type = "info", duration = 4000) {
   toast.className = `toast ${type}`;
   toast.textContent = message;
   toastContainer.appendChild(toast);
-
   setTimeout(() => {
     toast.style.opacity = "0";
     toast.style.transform = "translateX(40px)";
@@ -111,7 +108,6 @@ function switchTab(target) {
   loginView.classList.remove("active");
   if (forgotView) forgotView.classList.remove("active");
   if (resetView) resetView.classList.remove("active");
-
   tabSignupBtn.classList.remove("active");
   tabSignupBtn.setAttribute("aria-selected", "false");
   tabLoginBtn.classList.remove("active");
@@ -175,22 +171,20 @@ document.querySelectorAll(".toggle-password").forEach((button) => {
 function validateUsername(value) {
   const clean = value.trim();
   const valid = /^[a-zA-Z0-9_-]{3,30}$/.test(clean);
-
   if (!clean) {
     suUsername.classList.remove("valid-input", "invalid-input");
     valIconUsername.textContent = "";
     return false;
   }
-
   if (valid) {
     suUsername.classList.add("valid-input");
     suUsername.classList.remove("invalid-input");
-    valIconUsername.textContent = "✓";
+    valIconUsername.textContent = "✔";
     valIconUsername.style.color = "#10b981";
   } else {
     suUsername.classList.add("invalid-input");
     suUsername.classList.remove("valid-input");
-    valIconUsername.textContent = "✕";
+    valIconUsername.textContent = "✖";
     valIconUsername.style.color = "#ef4444";
   }
   return valid;
@@ -200,22 +194,20 @@ function validateEmail(value) {
   const clean = value.trim();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const valid = emailRegex.test(clean);
-
   if (!clean) {
     suEmail.classList.remove("valid-input", "invalid-input");
     valIconEmail.textContent = "";
     return false;
   }
-
   if (valid) {
     suEmail.classList.add("valid-input");
     suEmail.classList.remove("invalid-input");
-    valIconEmail.textContent = "✓";
+    valIconEmail.textContent = "✔";
     valIconEmail.style.color = "#10b981";
   } else {
     suEmail.classList.add("invalid-input");
     suEmail.classList.remove("valid-input");
-    valIconEmail.textContent = "✕";
+    valIconEmail.textContent = "✖";
     valIconEmail.style.color = "#ef4444";
   }
   return valid;
@@ -274,10 +266,10 @@ function updateReqItem(element, isMet) {
   const bullet = element.querySelector(".req-bullet");
   if (isMet) {
     element.classList.add("met");
-    bullet.textContent = "✓";
+    bullet.textContent = "✔";
   } else {
     element.classList.remove("met");
-    bullet.textContent = "○";
+    bullet.textContent = "•";
   }
 }
 
@@ -293,13 +285,13 @@ function checkPasswordMatch() {
   }
 
   if (pwd === confirm) {
-    confirmMatchHint.textContent = "✓ Passwords match";
+    confirmMatchHint.textContent = "✔ Passwords match";
     confirmMatchHint.className = "field-hint success";
     suConfirmPassword.classList.add("valid-input");
     suConfirmPassword.classList.remove("invalid-input");
     return true;
   } else {
-    confirmMatchHint.textContent = "✕ Passwords do not match";
+    confirmMatchHint.textContent = "✖ Passwords do not match";
     confirmMatchHint.className = "field-hint error";
     suConfirmPassword.classList.add("invalid-input");
     suConfirmPassword.classList.remove("valid-input");
@@ -319,7 +311,6 @@ suConfirmPassword.addEventListener("input", checkPasswordMatch);
 // Signup Form Submit Handler
 signupForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-
   const username = suUsername.value.trim();
   const email = suEmail.value.trim();
   const fullName = suFullName.value.trim() || null;
@@ -352,7 +343,6 @@ signupForm.addEventListener("submit", async (e) => {
   }
 
   setButtonLoading(btnSignup, true);
-
   try {
     const response = await fetch("/api/auth/signup", {
       method: "POST",
@@ -367,7 +357,6 @@ signupForm.addEventListener("submit", async (e) => {
     });
 
     const data = await response.json();
-
     if (!response.ok) {
       const errMsg = Array.isArray(data.detail)
         ? data.detail.map((d) => d.msg).join(", ")
@@ -378,8 +367,6 @@ signupForm.addEventListener("submit", async (e) => {
     showToast(data.message || "Account created! Check your email to verify before signing in.", "success", 7000);
     signupForm.reset();
     evaluatePassword("");
-
-    // Pre-populate username on login view and switch
     liIdentifier.value = username;
     switchTab("login");
   } catch (err) {
@@ -392,7 +379,6 @@ signupForm.addEventListener("submit", async (e) => {
 // Login Form Submit Handler
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-
   const identifier = liIdentifier.value.trim();
   const password = liPassword.value;
 
@@ -408,7 +394,6 @@ loginForm.addEventListener("submit", async (e) => {
   }
 
   setButtonLoading(btnLogin, true);
-
   try {
     const response = await fetch("/api/auth/login", {
       method: "POST",
@@ -416,8 +401,11 @@ loginForm.addEventListener("submit", async (e) => {
       body: JSON.stringify({ identifier, password }),
     });
 
-    const data = await response.json();
+    if (!(response.headers.get("content-type") || "").includes("application/json")) {
+      throw new Error("The server could not process your login. Please try again shortly.");
+    }
 
+    const data = await response.json();
     if (!response.ok) {
       if (response.status === 403 && data.detail && data.detail.toLowerCase().includes("verify")) {
         showToast(data.detail, "error", 7000);
@@ -467,22 +455,20 @@ function validateFpEmail(value) {
   const clean = value.trim();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const valid = emailRegex.test(clean);
-
   if (!clean) {
     fpEmail.classList.remove("valid-input", "invalid-input");
     valIconFpEmail.textContent = "";
     return false;
   }
-
   if (valid) {
     fpEmail.classList.add("valid-input");
     fpEmail.classList.remove("invalid-input");
-    valIconFpEmail.textContent = "✓";
+    valIconFpEmail.textContent = "✔";
     valIconFpEmail.style.color = "#10b981";
   } else {
     fpEmail.classList.add("invalid-input");
     fpEmail.classList.remove("valid-input");
-    valIconFpEmail.textContent = "✕";
+    valIconFpEmail.textContent = "✖";
     valIconFpEmail.style.color = "#ef4444";
   }
   return valid;
@@ -497,7 +483,6 @@ if (forgotForm) {
   forgotForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const email = fpEmail.value.trim();
-
     if (!validateFpEmail(email)) {
       showToast("Please enter a valid email address.", "error");
       fpEmail.focus();
@@ -505,20 +490,16 @@ if (forgotForm) {
     }
 
     setButtonLoading(btnForgot, true);
-
     try {
       const response = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.detail || "Failed to request password reset.");
       }
-
       showToast(
         data.message || "If an account with this email exists, a password reset link has been sent.",
         "success",
@@ -597,13 +578,13 @@ function checkResetPasswordMatch() {
   }
 
   if (pwd === confirm) {
-    rpConfirmMatchHint.textContent = "✓ Passwords match";
+    rpConfirmMatchHint.textContent = "✔ Passwords match";
     confirmMatchHint.className = "field-hint success";
     rpConfirmPassword.classList.add("valid-input");
     rpConfirmPassword.classList.remove("invalid-input");
     return true;
   } else {
-    rpConfirmMatchHint.textContent = "✕ Passwords do not match";
+    rpConfirmMatchHint.textContent = "✖ Passwords do not match";
     rpConfirmMatchHint.className = "field-hint error";
     rpConfirmPassword.classList.add("invalid-input");
     rpConfirmPassword.classList.remove("valid-input");
@@ -626,7 +607,6 @@ if (rpConfirmPassword) {
 if (resetForm) {
   resetForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-
     const token = rpToken.value.trim();
     const password = rpPassword.value;
     const confirmPassword = rpConfirmPassword.value;
@@ -647,7 +627,6 @@ if (resetForm) {
     }
 
     setButtonLoading(btnReset, true);
-
     try {
       const response = await fetch("/api/auth/reset-password", {
         method: "POST",
@@ -660,7 +639,6 @@ if (resetForm) {
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.detail || "Password reset failed.");
       }
@@ -686,7 +664,6 @@ function handleAuthSuccess(authData) {
   state.token = authData.access_token;
   state.currentUser = authData.user;
   localStorage.setItem("token", authData.access_token);
-
   renderDashboard(authData.user);
   loadDatabaseUsers();
 }
@@ -695,9 +672,9 @@ function handleAuthSuccess(authData) {
 function renderDashboard(user) {
   authSection.classList.add("hidden");
   dashboardSection.classList.remove("hidden");
+
   const displayName = user.full_name || user.username;
 
-  // Display avatar image if available, otherwise display fallback initial
   if (user.avatar_url) {
     dashAvatarImg.src = user.avatar_url;
     dashAvatarImg.classList.remove("hidden");
@@ -714,6 +691,7 @@ function renderDashboard(user) {
   dashUsername.textContent = user.username;
   dashEmail.textContent = user.email;
   dashFullname.textContent = user.full_name || "Not provided";
+
   const dateObj = new Date(user.created_at);
   dashJoined.textContent = dateObj.toLocaleDateString("en-US", {
     year: "numeric",
@@ -727,7 +705,6 @@ function renderDashboard(user) {
 // Fetch Registered Users from Database
 async function loadDatabaseUsers() {
   dbUsersTbody.innerHTML = `<tr><td colspan="5" class="table-loading">Loading users from SQLite...</td></tr>`;
-
   try {
     const response = await fetch("/api/users");
     if (!response.ok) throw new Error("Failed to fetch database users");
@@ -747,13 +724,12 @@ async function loadDatabaseUsers() {
           hour: "2-digit",
           minute: "2-digit",
         });
-
         return `
         <tr>
           <td><strong>#${u.id}</strong></td>
           <td>@${escapeHtml(u.username)}</td>
           <td>${escapeHtml(u.email)}</td>
-          <td>${escapeHtml(u.full_name || "—")}</td>
+          <td>${escapeHtml(u.full_name || "")}</td>
           <td>${formatted}</td>
         </tr>
       `;
@@ -766,7 +742,7 @@ async function loadDatabaseUsers() {
 
 btnRefreshUsers.addEventListener("click", loadDatabaseUsers);
 
-// Logout Handler (Resets to Login view)
+// Logout Handler
 btnLogout.addEventListener("click", () => {
   state.token = null;
   state.currentUser = null;
@@ -804,18 +780,16 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-// Check Email Verification URL Parameter (?token=...)
+// Check Email Verification URL Parameter
 async function checkEmailVerificationParam() {
   const params = new URLSearchParams(window.location.search);
   if (params.get("reset_token") || window.location.pathname.includes("reset-password")) return;
-
   const token = params.get("token");
   if (!token) return;
 
   try {
     const res = await fetch(`/api/auth/verify?token=${encodeURIComponent(token)}`);
     const data = await res.json();
-
     if (res.ok) {
       showToast(data.message || "Email verified! You can now sign in.", "success", 6000);
       switchTab("login");
@@ -829,19 +803,17 @@ async function checkEmailVerificationParam() {
   }
 }
 
-// Check Password Reset URL Parameter (?reset_token=... or /reset-password?token=...)
+// Check Password Reset URL Parameter
 async function checkPasswordResetParam() {
   const params = new URLSearchParams(window.location.search);
   const resetToken =
     params.get("reset_token") ||
     (window.location.pathname.includes("reset-password") ? params.get("token") : null);
-
   if (!resetToken) return;
 
   try {
     const res = await fetch(`/api/auth/verify-reset-token?token=${encodeURIComponent(resetToken)}`);
     const data = await res.json();
-
     if (res.ok) {
       if (rpToken) rpToken.value = resetToken;
       showToast("Reset token verified. Please enter your new password.", "info", 5000);
@@ -860,14 +832,12 @@ async function checkPasswordResetParam() {
 // Initial Session Check
 async function checkExistingSession() {
   if (!state.token) return;
-
   try {
     const response = await fetch("/api/auth/me", {
       headers: {
         Authorization: `Bearer ${state.token}`,
       },
     });
-
     if (response.ok) {
       const user = await response.json();
       state.currentUser = user;
@@ -886,7 +856,6 @@ if (avatarInput) {
   avatarInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     if (file.size > 5 * 1024 * 1024) {
       showToast("Image must be smaller than 5MB", "error");
       avatarInput.value = "";
@@ -906,7 +875,7 @@ if (avatarInput) {
         body: formData,
       });
 
-      const data = await res.json();
+      const data = await response.json();
       if (!res.ok) {
         throw new Error(data.detail || "Failed to upload avatar");
       }
