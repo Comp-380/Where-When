@@ -74,6 +74,8 @@ const rpConfirmMatchHint = document.getElementById("rp-confirm-match-hint");
 const btnReset = document.getElementById("btn-reset");
 
 // Dashboard Elements
+const dashAvatarImg = document.getElementById("dash-avatar-img");
+const avatarInput = document.getElementById("avatar-input");
 const dashAvatar = document.getElementById("dash-avatar");
 const dashGreetingName = document.getElementById("dash-greeting-name");
 const dashGreetingHandle = document.getElementById("dash-greeting-handle");
@@ -693,17 +695,25 @@ function handleAuthSuccess(authData) {
 function renderDashboard(user) {
   authSection.classList.add("hidden");
   dashboardSection.classList.remove("hidden");
-
   const displayName = user.full_name || user.username;
-  dashAvatar.textContent = (displayName[0] || "U").toUpperCase();
+
+  // Display avatar image if available, otherwise display fallback initial
+  if (user.avatar_url) {
+    dashAvatarImg.src = user.avatar_url;
+    dashAvatarImg.classList.remove("hidden");
+    dashAvatar.classList.add("hidden");
+  } else {
+    dashAvatar.textContent = (displayName[0] || "U").toUpperCase();
+    dashAvatar.classList.remove("hidden");
+    dashAvatarImg.classList.add("hidden");
+  }
+
   dashGreetingName.textContent = `Welcome, ${displayName}!`;
   dashGreetingHandle.textContent = `@${user.username}`;
-
   dashId.textContent = `#${user.id}`;
   dashUsername.textContent = user.username;
   dashEmail.textContent = user.email;
   dashFullname.textContent = user.full_name || "Not provided";
-
   const dateObj = new Date(user.created_at);
   dashJoined.textContent = dateObj.toLocaleDateString("en-US", {
     year: "numeric",
@@ -870,6 +880,46 @@ async function checkExistingSession() {
   } catch (e) {
     // Leave at Sign In on connection failure
   }
+}
+
+if (avatarInput) {
+  avatarInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Image must be smaller than 5MB", "error");
+      avatarInput.value = "";
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      showToast("Uploading avatar...", "info", 2000);
+      const res = await fetch("/api/users/me/avatar", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${state.token}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to upload avatar");
+      }
+
+      state.currentUser = data;
+      renderDashboard(data);
+      showToast("Profile picture updated!", "success");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      avatarInput.value = "";
+    }
+  });
 }
 
 // Boot application
