@@ -1,3 +1,8 @@
+import shutil
+import uuid
+from pathlib import Path
+from typing import List
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status, File, UploadFile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List
@@ -34,6 +39,10 @@ from backend.schemas import (
 )
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads" / "avatars"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @asynccontextmanager
@@ -274,6 +283,39 @@ def reset_password(
         message="Your password has been successfully reset. You can now log in."
     )
 
+@app.post(
+    "/api/users/me/avatar",
+    response_model=UserResponse,
+    summary="Upload user avatar image",
+)
+def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid image format. Allowed formats: JPEG, PNG, WEBP, GIF.",
+        )
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+        ext = ".png"
+
+    unique_filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}{ext}"
+    dest_path = UPLOAD_DIR / unique_filename
+
+    with dest_path.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    current_user.avatar_url = f"/media/avatars/{unique_filename}"
+    db.commit()
+    db.refresh(current_user)
+
+    return current_user
+
 
 @app.get(
     "/api/auth/me",
@@ -298,6 +340,7 @@ def list_users(db: Session = Depends(get_db)):
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
+app.mount("/media/avatars", StaticFiles(directory=str(UPLOAD_DIR)), name="avatars")
 
 @app.get("/", include_in_schema=False)
 @app.get("/reset-password", include_in_schema=False)
