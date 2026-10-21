@@ -1150,3 +1150,47 @@ if (btnDeleteAccount) {
     }
   });
 }
+
+// ==================== CREATE GROUP (SCRUM-40) ====================
+const createGroupForm = document.getElementById("create-group-form");
+const groupNameInput = document.getElementById("group-name");
+const groupDescInput = document.getElementById("group-desc");
+const btnCreateGroup = document.getElementById("btn-create-group");
+
+if (createGroupForm) {
+  createGroupForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = groupNameInput.value.trim();
+    const description = groupDescInput.value.trim() || null;
+
+    if (!name || name.length < 2) {
+      showToast("Group name must be at least 2 characters.", "error");
+      groupNameInput.focus();
+      return;
+    }
+
+    setButtonLoading(btnCreateGroup, true);
+    try {
+      const response = await fetch("/api/groups", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${state.token}`,
+        },
+        body: JSON.stringify({ name, description }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to create group.");
+      }
+
+      showToast(`Group "${data.name}" created successfully!`, "success", 5000);
+      createGroupForm.reset();
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setButtonLoading(btnCreateGroup, false);
+    }
+  });
+}

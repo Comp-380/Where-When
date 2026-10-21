@@ -525,6 +525,40 @@
       </div>
 
       <div class="dashboard-grid">
+
+<!-- Group Creation Section (SCRUM-40) -->
+      <div class="calendar-section" style="margin-bottom: 1.5rem;">
+        <div class="calendar-header" style="margin-bottom: 0.75rem;">
+          <div>
+            <h3>Create a Group</h3>
+            <p>Start a new group circle for events, coordination, and availability</p>
+          </div>
+        </div>
+
+        <form id="create-group-form" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="group-name">Group Name <span class="req">*</span></label>
+            <div class="input-wrapper">
+              <input type="text" id="group-name" placeholder="e.g. Weekend Roadtrip, Project Alpha" required minlength="2" maxlength="100" />
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="group-desc">Description (Optional)</label>
+            <div class="input-wrapper">
+              <input type="text" id="group-desc" placeholder="e.g. Planning cabin logistics and meetup dates" maxlength="255" />
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; margin-top: 0.25rem;">
+            <button type="submit" id="btn-create-group" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem; font-size: 0.85rem;">
+              <span class="btn-text">+ Create Group</span>
+              <div class="spinner hidden"></div>
+            </button>
+          </div>
+        </form>
+      </div>
+
 <!-- User Profile Info -->
         <div class="info-card">
           <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">

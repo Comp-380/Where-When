@@ -33,11 +33,13 @@ from backend.auth import (
     verify_password_reset_token,
 )
 from backend.database import Base, engine, get_db
-from backend.models import User, Availability
+from backend.models import User, Availability, Group
 from backend.schemas import (
     AvailabilityCreate,
     AvailabilityResponse,
     ForgotPasswordRequest,
+    GroupCreate,
+    GroupResponse,
     MessageResponse,
     ResendVerificationRequest,
     ResetPasswordRequest,
@@ -201,6 +203,27 @@ def login(login_in: UserLogin, db: Session = Depends(get_db)):
         token_type="bearer",
         user=UserResponse.model_validate(user),
     )
+
+@app.post(
+    "/api/groups",
+    response_model=GroupResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new group record",
+)
+def create_group(
+    group_in: GroupCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    new_group = Group(
+        name=group_in.name,
+        description=group_in.description,
+        owner_id=current_user.id,
+    )
+    db.add(new_group)
+    db.commit()
+    db.refresh(new_group)
+    return new_group
 
 
 @app.post(

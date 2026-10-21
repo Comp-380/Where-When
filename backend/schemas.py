@@ -130,3 +130,25 @@ class AvailabilityResponse(BaseModel):
     title: str
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+class GroupCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100, description="Name of the group")
+    description: Optional[str] = Field(None, max_length=255, description="Optional description of the group")
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        clean = v.strip()
+        if len(clean) < 2:
+            raise ValueError("Group name must be at least 2 characters.")
+        return clean
+
+
+class GroupResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    owner_id: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
