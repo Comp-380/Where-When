@@ -5,7 +5,6 @@ from datetime import date
 from pathlib import Path
 from typing import List, Optional
 
-
 from fastapi import (
     BackgroundTasks,
     Depends,
@@ -33,13 +32,15 @@ from backend.auth import (
     verify_password_reset_token,
 )
 from backend.database import Base, engine, get_db
-from backend.models import User, Availability, Group
+from backend.models import User, Availability, Group, GroupMember
 from backend.schemas import (
     AvailabilityCreate,
     AvailabilityResponse,
     ForgotPasswordRequest,
     GroupCreate,
+    GroupMemberResponse,
     GroupResponse,
+    MemberAddRequest,
     MessageResponse,
     ResendVerificationRequest,
     ResetPasswordRequest,
@@ -64,7 +65,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="User Authentication API",
     description="FastAPI backend with SQLite database, secure password hashing, and email verification",
-    version="1.2.0",
+    version="1.3.0",
     lifespan=lifespan,
 )
 
@@ -204,6 +205,8 @@ def login(login_in: UserLogin, db: Session = Depends(get_db)):
         user=UserResponse.model_validate(user),
     )
 
+
+# --- Group Endpoints ---
 @app.post(
     "/api/groups",
     response_model=GroupResponse,
@@ -223,7 +226,181 @@ def create_group(
     db.add(new_group)
     db.commit()
     db.refresh(new_group)
-    return new_group
+
+    membership = GroupMember(
+        group_id=new_group.id,
+        user_id=current_user.id,
+        role="owner",
+    )
+    db.add(membership)
+    db.commit()
+
+    return GroupResponse(
+        id=new_group.id,
+        name=new_group.name,
+        description=new_group.description,
+        owner_id=new_group.owner_id,
+        member_count=1,
+        created_at=new_group.created_at,
+    )
+
+
+@app.get(
+    "/api/groups",
+    response_model=List[GroupResponse],
+    summary="List groups the current user belongs to",
+)
+def get_user_groups(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    memberships = (
+        db.query(GroupMember)
+        .filter(GroupMember.user_id == current_user.id)
+        .all()
+    )
+    group_ids = [m.group_id for m in memberships]
+    groups = db.query(Group).filter(Group.id.in_(group_ids)).order_by(Group.id.desc()).all()
+
+    response = []
+    for g in groups:
+        count = db.query(GroupMember).filter(GroupMember.group_id == g.id).count()
+        response.append(
+            GroupResponse(
+                id=g.id,
+                name=g.name,
+                description=g.description,
+                owner_id=g.owner_id,
+                member_count=count,
+                created_at=g.created_at,
+            )
+        )
+    return response
+
+
+@app.get(
+    "/api/groups/{group_id}/members",
+    response_model=List[GroupMemberResponse],
+    summary="List members of a specific group along with their availability",
+)
+def get_group_members(
+    group_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_mem = (
+        db.query(GroupMember)
+        .filter(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id)
+        .first()
+    )
+    if not user_mem:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+
+    members = (
+        db.query(GroupMember, User)
+        .join(User, GroupMember.user_id == User.id)
+        .filter(GroupMember.group_id == group_id)
+        .all()
+    )
+
+    response = []
+    for mem, usr in members:
+        slots = (
+            db.query(Availability)
+            .filter(Availability.user_id == usr.id)
+            .order_by(Availability.date.asc(), Availability.start_time.asc())
+            .all()
+        )
+        response.append(
+            GroupMemberResponse(
+                id=mem.id,
+                user_id=usr.id,
+                username=usr.username,
+                full_name=usr.full_name,
+                role=mem.role,
+                joined_at=mem.joined_at,
+                availabilities=[AvailabilityResponse.model_validate(s) for s in slots],
+            )
+        )
+
+    return response
+
+
+@app.post(
+    "/api/groups/{group_id}/members",
+    response_model=MessageResponse,
+    summary="Add a user to the group by username or email",
+)
+def add_group_member(
+    group_id: int,
+    req: MemberAddRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+
+    if group.owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the group owner can add members.")
+
+    identifier = req.identifier.strip().lower()
+    target_user = (
+        db.query(User)
+        .filter((User.username == identifier) | (User.email == identifier))
+        .first()
+    )
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    existing_mem = (
+        db.query(GroupMember)
+        .filter(GroupMember.group_id == group_id, GroupMember.user_id == target_user.id)
+        .first()
+    )
+    if existing_mem:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User is already in this group.")
+
+    new_mem = GroupMember(group_id=group_id, user_id=target_user.id, role="member")
+    db.add(new_mem)
+    db.commit()
+
+    return MessageResponse(message=f"Added @{target_user.username} to {group.name} successfully.")
+
+
+@app.delete(
+    "/api/groups/{group_id}/members/{user_id}",
+    response_model=MessageResponse,
+    summary="Remove a member from the group (owner only)",
+)
+def remove_group_member(
+    group_id: int,
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+
+    if group.owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the owner can remove members.")
+
+    if user_id == group.owner_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The owner cannot be removed from the group.")
+
+    membership = (
+        db.query(GroupMember)
+        .filter(GroupMember.group_id == group_id, GroupMember.user_id == user_id)
+        .first()
+    )
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found in this group.")
+
+    db.delete(membership)
+    db.commit()
+
+    return MessageResponse(message="Member removed from group successfully.")
 
 
 @app.post(
@@ -279,7 +456,6 @@ def reset_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password reset token is invalid or has expired.",
         )
-
     user.hashed_password = hash_password(request.password)
     user.is_verified = True
     db.commit()
@@ -295,6 +471,7 @@ def reset_password(
 )
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
 
 @app.patch(
     "/api/users/me",
@@ -367,7 +544,6 @@ def upload_avatar(
     current_user.avatar_url = f"/media/avatars/{unique_filename}"
     db.commit()
     db.refresh(current_user)
-
     return current_user
 
 

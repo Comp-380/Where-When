@@ -32,6 +32,85 @@
       padding: 0 0.5rem;
       width: 100%;
     }
+    .dash-nav {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.25rem;
+    }
+    .dash-tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 0.92rem;
+      font-weight: 600;
+      padding: 0.6rem 1rem;
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      transition: all 0.2s ease;
+    }
+    .dash-tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .dash-tab-btn.active {
+      color: #fff;
+      background: var(--primary);
+    }
+    .dash-tab-badge {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+      padding: 0.1rem 0.45rem;
+      font-size: 0.72rem;
+    }
+    .dash-panel {
+      display: none;
+    }
+    .dash-panel.active {
+      display: block;
+      animation: fadeIn 0.2s ease-out;
+    }
+    .group-clickable-card {
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .group-clickable-card:hover {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.06);
+      transform: translateY(-1px);
+    }
+    .member-card {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 0.85rem;
+      margin-bottom: 0.75rem;
+    }
+    .member-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .member-avail-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.4rem;
+    }
+    .avail-pill {
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: var(--text-main);
+      font-size: 0.72rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
@@ -41,18 +120,15 @@
   </div>
 
   <div class="app-container">
-    <!-- Main Title Heading -->
     <div class="portal-hero-title" style="text-align: center; margin-bottom: 2rem;">
       <h1>Where and When?</h1>
       <p style="color: var(--text-secondary); font-size: 1.05rem; margin: 0;">Plan, coordinate, and connect effortlessly.</p>
     </div>
 
-    <!-- Notification Toast System -->
     <div id="toast-container" class="toast-container"></div>
 
     <!-- Auth Card (Signup & Login) -->
     <main id="auth-section" class="auth-card">
-      <!-- Tab Navigation -->
       <div class="tabs-nav" role="tablist">
         <button id="tab-login-btn" class="tab-btn active" role="tab" aria-selected="true">
           Sign In
@@ -62,12 +138,13 @@
         </button>
       </div>
 
-      <!-- LOGIN VIEW (Default) -->
+      <!-- LOGIN VIEW -->
       <section id="login-view" class="view-panel active">
         <div class="panel-header">
           <h2>Welcome back</h2>
           <p>Sign in to your account with your email or username.</p>
         </div>
+
         <form id="login-form" novalidate>
           <div class="form-group">
             <label for="li-identifier">Username or Email <span class="req">*</span></label>
@@ -118,7 +195,6 @@
             <div class="spinner hidden"></div>
           </button>
 
-          <!-- Resend Verification Link -->
           <div id="resend-section" class="panel-footer hidden" style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px dashed var(--border-color);">
             <span>Need a new verification link?</span>
             <button type="button" class="link-btn" id="btn-resend-verification">Resend Email</button>
@@ -137,6 +213,7 @@
           <h2>Get started in seconds</h2>
           <p>Create your secure account. Your password will be encrypted with bcrypt and stored in SQLite.</p>
         </div>
+
         <form id="signup-form" novalidate>
           <div class="form-row">
             <div class="form-group">
@@ -212,7 +289,6 @@
               </button>
             </div>
 
-            <!-- Password Strength Indicator -->
             <div class="password-meter-container">
               <div class="meter-bar-track">
                 <div id="password-meter-fill" class="meter-bar-fill"></div>
@@ -223,23 +299,12 @@
               </div>
             </div>
 
-            <!-- Password Requirements Checklist -->
             <ul class="pwd-requirements" id="pwd-requirements-list">
-              <li id="req-len" class="req-item">
-                <span class="req-bullet">•</span> At least 8 characters
-              </li>
-              <li id="req-upper" class="req-item">
-                <span class="req-bullet">•</span> One uppercase letter (A-Z)
-              </li>
-              <li id="req-lower" class="req-item">
-                <span class="req-bullet">•</span> One lowercase letter (a-z)
-              </li>
-              <li id="req-num" class="req-item">
-                <span class="req-bullet">•</span> One number (0-9)
-              </li>
-              <li id="req-special" class="req-item">
-                <span class="req-bullet">•</span> One special symbol (!@#$%^&*)
-              </li>
+              <li id="req-len" class="req-item"><span class="req-bullet"> </span> At least 8 characters</li>
+              <li id="req-upper" class="req-item"><span class="req-bullet"> </span> One uppercase letter (A-Z)</li>
+              <li id="req-lower" class="req-item"><span class="req-bullet"> </span> One lowercase letter (a-z)</li>
+              <li id="req-num" class="req-item"><span class="req-bullet"> </span> One number (0-9)</li>
+              <li id="req-special" class="req-item"><span class="req-bullet"> </span> One special symbol (!@#$%^&*)</li>
             </ul>
           </div>
 
@@ -297,6 +362,7 @@
           <h2>Reset password</h2>
           <p>Enter your registered email address and we'll send you instructions to reset your password.</p>
         </div>
+
         <form id="forgot-form" novalidate>
           <div class="form-group">
             <label for="fp-email">Email Address <span class="req">*</span></label>
@@ -332,8 +398,10 @@
           <h2>Set new password</h2>
           <p>Choose a strong new password for your account.</p>
         </div>
+
         <form id="reset-form" novalidate>
           <input type="hidden" id="rp-token" name="token">
+
           <div class="form-group">
             <label for="rp-password">New Password <span class="req">*</span></label>
             <div class="input-wrapper">
@@ -360,7 +428,6 @@
               </button>
             </div>
 
-            <!-- Password Strength Indicator -->
             <div class="password-meter-container">
               <div class="meter-bar-track">
                 <div id="rp-password-meter-fill" class="meter-bar-fill"></div>
@@ -371,23 +438,12 @@
               </div>
             </div>
 
-            <!-- Password Requirements Checklist -->
             <ul class="pwd-requirements" id="rp-pwd-requirements-list">
-              <li id="rp-req-len" class="req-item">
-                <span class="req-bullet">•</span> At least 8 characters
-              </li>
-              <li id="rp-req-upper" class="req-item">
-                <span class="req-bullet">•</span> One uppercase letter (A-Z)
-              </li>
-              <li id="rp-req-lower" class="req-item">
-                <span class="req-bullet">•</span> One lowercase letter (a-z)
-              </li>
-              <li id="rp-req-num" class="req-item">
-                <span class="req-bullet">•</span> One number (0-9)
-              </li>
-              <li id="rp-req-special" class="req-item">
-                <span class="req-bullet">•</span> One special symbol (!@#$%^&*)
-              </li>
+              <li id="rp-req-len" class="req-item"><span class="req-bullet"> </span> At least 8 characters</li>
+              <li id="rp-req-upper" class="req-item"><span class="req-bullet"> </span> One uppercase letter (A-Z)</li>
+              <li id="rp-req-lower" class="req-item"><span class="req-bullet"> </span> One lowercase letter (a-z)</li>
+              <li id="rp-req-num" class="req-item"><span class="req-bullet"> </span> One number (0-9)</li>
+              <li id="rp-req-special" class="req-item"><span class="req-bullet"> </span> One special symbol (!@#$%^&*)</li>
             </ul>
           </div>
 
@@ -462,104 +518,21 @@
         </button>
       </div>
 
-      <!-- Calendar Availability Section -->
-      <div class="calendar-section">
-        <div class="calendar-header">
-          <div>
-            <h3>My Calendar Availability</h3>
-            <p>Select dates and schedule your open hours</p>
-          </div>
-          <div class="calendar-nav">
-            <button id="cal-prev-btn" class="btn-refresh" title="Previous Month">&larr;</button>
-            <span id="cal-month-year" class="cal-month-title">Month Year</span>
-            <button id="cal-next-btn" class="btn-refresh" title="Next Month">&rarr;</button>
-          </div>
-        </div>
+      <!-- DASHBOARD TAB NAVIGATION BAR (Account -> Availability -> Groups) -->
+      <nav class="dash-nav" id="dash-tabs-nav">
+        <button type="button" class="dash-tab-btn active" id="tab-btn-account" data-target="panel-account">
+          ⚙️ Account
+        </button>
+        <button type="button" class="dash-tab-btn" id="tab-btn-availability" data-target="panel-availability">
+          📅 Availability
+        </button>
+        <button type="button" class="dash-tab-btn" id="tab-btn-groups" data-target="panel-groups">
+          👥 Groups <span class="dash-tab-badge" id="dash-groups-badge">0</span>
+        </button>
+      </nav>
 
-        <div class="calendar-layout">
-          <div class="calendar-card">
-            <div class="cal-grid-weekdays">
-              <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
-            </div>
-            <div id="cal-days-grid" class="cal-grid-days"></div>
-          </div>
-
-          <div class="availability-sidebar">
-            <h4 id="cal-selected-date-text">Select a date</h4>
-            
-            <form id="availability-form" class="hidden">
-              <input type="hidden" id="avail-date-input" />
-              <div class="form-group" style="margin-bottom: 0.75rem;">
-                <label for="avail-title">Label / Activity</label>
-                <div class="input-wrapper">
-                  <input type="text" id="avail-title" placeholder="e.g. Office Hours, Mentoring" value="Available" required />
-                </div>
-              </div>
-              <div class="form-row" style="gap: 0.5rem; margin-bottom: 0.75rem;">
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="avail-start">Start Time</label>
-                  <div class="input-wrapper">
-                    <input type="time" id="avail-start" value="09:00" required />
-                  </div>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                  <label for="avail-end">End Time</label>
-                  <div class="input-wrapper">
-                    <input type="time" id="avail-end" value="17:00" required />
-                  </div>
-                </div>
-              </div>
-              <button type="submit" id="btn-add-slot" class="btn-primary" style="padding: 0.6rem; font-size: 0.85rem;">
-                + Add Time Slot
-              </button>
-            </form>
-
-            <div class="slots-container">
-              <h5>Scheduled Slots</h5>
-              <div id="date-slots-list" class="slots-list">
-                <p class="cal-empty-slots">No slots for this date.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="dashboard-grid">
-
-<!-- Group Creation Section (SCRUM-40) -->
-      <div class="calendar-section" style="margin-bottom: 1.5rem;">
-        <div class="calendar-header" style="margin-bottom: 0.75rem;">
-          <div>
-            <h3>Create a Group</h3>
-            <p>Start a new group circle for events, coordination, and availability</p>
-          </div>
-        </div>
-
-        <form id="create-group-form" style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <div class="form-group" style="margin-bottom: 0;">
-            <label for="group-name">Group Name <span class="req">*</span></label>
-            <div class="input-wrapper">
-              <input type="text" id="group-name" placeholder="e.g. Weekend Roadtrip, Project Alpha" required minlength="2" maxlength="100" />
-            </div>
-          </div>
-
-          <div class="form-group" style="margin-bottom: 0;">
-            <label for="group-desc">Description (Optional)</label>
-            <div class="input-wrapper">
-              <input type="text" id="group-desc" placeholder="e.g. Planning cabin logistics and meetup dates" maxlength="255" />
-            </div>
-          </div>
-
-          <div style="display: flex; justify-content: flex-end; margin-top: 0.25rem;">
-            <button type="submit" id="btn-create-group" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem; font-size: 0.85rem;">
-              <span class="btn-text">+ Create Group</span>
-              <div class="spinner hidden"></div>
-            </button>
-          </div>
-        </form>
-      </div>
-
-<!-- User Profile Info -->
+      <!-- 1. ACCOUNT DETAILS PANEL -->
+      <div id="panel-account" class="dash-panel active">
         <div class="info-card">
           <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
             <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -572,7 +545,6 @@
             <button id="btn-toggle-edit-profile" class="btn-refresh" style="font-size: 0.75rem;">Edit Profile</button>
           </div>
 
-          <!-- Edit Profile Inline Form -->
           <form id="edit-profile-form" class="hidden" style="margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color);">
             <div class="form-group" style="margin-bottom: 0.6rem;">
               <label for="edit-fullname">Display Name</label>
@@ -617,99 +589,169 @@
             <span class="badge badge-success" id="dash-status">Active</span>
           </div>
 
-          <!-- Delete Account Button -->
           <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid rgba(239, 68, 68, 0.2); display: flex; justify-content: flex-end;">
             <button id="btn-delete-account" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: var(--radius-sm); padding: 0.4rem 0.8rem; font-size: 0.78rem; font-weight: 600; cursor: pointer;">
               Delete Account
             </button>
           </div>
         </div>
+      </div>
 
-        <!-- Security & Architecture Info -->
-        <!--<div class="info-card">
-          <div class="card-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            Security & Session
-          </div>
-          <div class="security-badges">
-            <div class="security-item">
-              <span class="sec-dot green"></span>
-              <div>
-                <strong>Bcrypt Password Hashing</strong>
-                <p>12 salt rounds, one-way hash</p>
-              </div>
+      <!-- 2. AVAILABILITY PANEL -->
+      <div id="panel-availability" class="dash-panel">
+        <div class="calendar-section">
+          <div class="calendar-header">
+            <div>
+              <h3>My Calendar Availability</h3>
+              <p>Select dates and schedule your open hours</p>
             </div>
-            <div class="security-item">
-              <span class="sec-dot green"></span>
-              <div>
-                <strong>JWT Session Active</strong>
-                <p>HMAC-SHA256 signature with 24h validity</p>
-              </div>
-            </div>
-            <div class="security-item">
-              <span class="sec-dot green"></span>
-              <div>
-                <strong>SQLite Database</strong>
-                <p>ACID-compliant relational storage</p>
-              </div>
+            <div class="calendar-nav">
+              <button id="cal-prev-btn" class="btn-refresh" title="Previous Month">&larr;</button>
+              <span id="cal-month-year" class="cal-month-title">Month Year</span>
+              <button id="cal-next-btn" class="btn-refresh" title="Next Month">&rarr;</button>
             </div>
           </div>
-          <div class="api-links">
-            <a href="/docs" target="_blank" class="api-link-btn">
-              <span>View Swagger API Docs</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" x2="21" y1="14" y2="3"/>
-              </svg>
-            </a>
+
+          <div class="calendar-layout">
+            <div class="calendar-card">
+              <div class="cal-grid-weekdays">
+                <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+              </div>
+              <div id="cal-days-grid" class="cal-grid-days"></div>
+            </div>
+
+            <div class="availability-sidebar">
+              <h4 id="cal-selected-date-text">Select a date</h4>
+              
+              <form id="availability-form" class="hidden">
+                <input type="hidden" id="avail-date-input" />
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                  <label for="avail-title">Label / Activity</label>
+                  <div class="input-wrapper">
+                    <input type="text" id="avail-title" placeholder="e.g. Office Hours, Mentoring" value="Available" required />
+                  </div>
+                </div>
+                <div class="form-row" style="gap: 0.5rem; margin-bottom: 0.75rem;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="avail-start">Start Time</label>
+                    <div class="input-wrapper">
+                      <input type="time" id="avail-start" value="09:00" required />
+                    </div>
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="avail-end">End Time</label>
+                    <div class="input-wrapper">
+                      <input type="time" id="avail-end" value="17:00" required />
+                    </div>
+                  </div>
+                </div>
+                <button type="submit" id="btn-add-slot" class="btn-primary" style="padding: 0.6rem; font-size: 0.85rem;">
+                  + Add Time Slot
+                </button>
+              </form>
+
+              <div class="slots-container">
+                <h5>Scheduled Slots</h5>
+                <div id="date-slots-list" class="slots-list">
+                  <p class="cal-empty-slots">No slots for this date.</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>-->
+      </div>
 
-      <!-- Live Database Users Table -->
-      <!--<div class="db-section">
-        <div class="db-section-header">
-          <div>
-            <h3>Registered Database Users</h3>
-            <p>Live data fetched from SQLite database (`users` table)</p>
+      <!-- 3. GROUPS PANEL -->
+      <div id="panel-groups" class="dash-panel">
+        <!-- Create Group Card -->
+        <div class="calendar-section" style="margin-bottom: 1.5rem;">
+          <div class="calendar-header" style="margin-bottom: 0.75rem;">
+            <div>
+              <h3>Create a Group</h3>
+              <p>Start a new group circle for events, coordination, and availability</p>
+            </div>
           </div>
-          <button id="btn-refresh-users" class="btn-refresh" title="Refresh user list">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-              <path d="M21 3v5h-5"/>
-              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-              <path d="M8 16H3v5"/>
-            </svg>
-            Refresh
-          </button>
+          <form id="create-group-form" style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="group-name">Group Name <span class="req">*</span></label>
+              <div class="input-wrapper">
+                <input type="text" id="group-name" placeholder="e.g. Weekend Roadtrip, Project Alpha" required minlength="2" maxlength="100" />
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="group-desc">Description (Optional)</label>
+              <div class="input-wrapper">
+                <input type="text" id="group-desc" placeholder="e.g. Planning cabin logistics and meetup dates" maxlength="255" />
+              </div>
+            </div>
+            <div style="display: flex; justify-content: flex-end; margin-top: 0.25rem;">
+              <button type="submit" id="btn-create-group" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem; font-size: 0.85rem;">
+                <span class="btn-text">+ Create Group</span>
+                <div class="spinner hidden"></div>
+              </button>
+            </div>
+          </form>
         </div>
-        <div class="table-container">
-          <table class="db-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Display Name</th>
-                <th>Created At</th>
-              </tr>
-            </thead>
-            <tbody id="db-users-tbody">
-              <tr>
-                <td colspan="5" class="table-loading">Loading users...</td>
-              </tr>
-            </tbody>
-          </table>
+
+        <!-- Groups Display List -->
+        <div class="calendar-section">
+          <div class="calendar-header" style="margin-bottom: 0.75rem;">
+            <div>
+              <h3>My Groups & Circles</h3>
+              <p>Click any group below to inspect member availability and management</p>
+            </div>
+            <button id="btn-refresh-groups" class="btn-refresh" title="Refresh Groups">
+              Refresh
+            </button>
+          </div>
+          <div id="groups-list-container" class="slots-list" style="max-height: 350px;">
+            <p class="cal-empty-slots">Loading groups...</p>
+          </div>
         </div>
       </div>
     </main>
-  -->
 
-    <!-- App Bottom Bar (Positioned below both Auth Card & Dashboard Card) -->
+    <!-- Group Detail & Member Availability Modal -->
+    <div id="group-detail-modal" class="modal-overlay hidden">
+      <div class="modal-card" style="max-width: 580px; text-align: left; max-height: 85vh; display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+          <div>
+            <h3 id="modal-group-name" style="margin-bottom: 0.25rem; font-size: 1.35rem;">Group Name</h3>
+            <p id="modal-group-desc" style="color: var(--text-secondary); font-size: 0.82rem; margin: 0;"></p>
+          </div>
+          <button type="button" id="btn-close-group-modal" class="btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 1rem; cursor: pointer;">&times;</button>
+        </div>
+
+        <!-- Add Member Bar (visible only to Group Owner) -->
+        <div id="group-owner-add-member-section" class="hidden" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+          <label style="font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 0.4rem; color: var(--accent);">
+            + Add New Member (Owner Only)
+          </label>
+          <form id="add-member-form" style="display: flex; gap: 0.5rem;">
+            <div class="input-wrapper" style="flex: 1;">
+              <input type="text" id="add-member-identifier" placeholder="Enter username or email" required style="padding: 0.5rem 0.75rem; font-size: 0.85rem;" />
+            </div>
+            <button type="submit" id="btn-add-member" class="btn-primary" style="width: auto; padding: 0.5rem 1rem; font-size: 0.85rem;">
+              <span class="btn-text">Add</span>
+              <div class="spinner hidden"></div>
+            </button>
+          </form>
+        </div>
+
+        <!-- Members Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <h4 style="font-size: 0.95rem; margin: 0; color: var(--text-main);">Group Members & Availability</h4>
+          <span id="modal-members-count" class="badge">0 members</span>
+        </div>
+
+        <!-- Scrollable Members List -->
+        <div id="group-members-list" style="overflow-y: auto; flex: 1; padding-right: 4px;">
+          <p class="cal-empty-slots">Loading group members...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- App Bottom Bar -->
     <footer class="app-footer-bar">
       <div class="brand">
         <div class="brand-icon">
@@ -726,20 +768,7 @@
       </div>
     </footer>
   </div>
-<!-- Post-Login Profile Completion Prompt Modal -->
-  <div id="profile-prompt-modal" class="modal-overlay hidden">
-    <div class="modal-card">
-      <h3>Complete Your Profile</h3>
-      <p>Would you like to add your profile information now or do it later?</p>
-      <div class="modal-actions">
-        <button type="button" id="btn-modal-later" class="btn-secondary">Maybe later</button>
-        <button type="button" id="btn-modal-complete" class="btn-primary">
-          <span class="btn-text">Complete Profile</span>
-          <div class="spinner hidden"></div>
-        </button>
-      </div>
-    </div>
-  </div>
-  <script src="/static/js/app.js?v=20261013-login-default"></script>
+
+  <script src="/static/js/app.js?v=20261021-group-members-avail"></script>
 </body>
 </html>
