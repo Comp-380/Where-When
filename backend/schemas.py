@@ -131,6 +131,8 @@ class AvailabilityResponse(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
+# --- Group Schemas ---
 class GroupCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=100, description="Name of the group")
     description: Optional[str] = Field(None, max_length=255, description="Optional description of the group")
@@ -144,11 +146,26 @@ class GroupCreate(BaseModel):
         return clean
 
 
+class MemberAddRequest(BaseModel):
+    identifier: str = Field(..., description="Username or email of user to add")
+
+
+class GroupMemberResponse(BaseModel):
+    id: int
+    user_id: int
+    username: str
+    full_name: Optional[str] = None
+    role: str
+    joined_at: datetime
+    availabilities: List[AvailabilityResponse] = []
+    model_config = ConfigDict(from_attributes=True)
+
+
 class GroupResponse(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
     owner_id: int
+    member_count: int = 1
     created_at: datetime
-
     model_config = ConfigDict(from_attributes=True)

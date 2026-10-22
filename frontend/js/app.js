@@ -5,13 +5,15 @@ const state = {
   currentCalDate: new Date(),
   selectedDateStr: null,
   userAvailabilities: [],
+  userGroups: [],
+  selectedGroup: null,
 };
 
 // DOM Elements
 const authSection = document.getElementById("auth-section");
 const dashboardSection = document.getElementById("dashboard-section");
 
-// Tab / View Elements
+// Tab / View Elements (Auth)
 const tabSignupBtn = document.getElementById("tab-signup-btn");
 const tabLoginBtn = document.getElementById("tab-login-btn");
 const signupView = document.getElementById("signup-view");
@@ -23,6 +25,11 @@ const linkToSignup = document.getElementById("link-to-signup");
 const btnForgotPassword = document.getElementById("btn-forgot-password");
 const linkFpToLogin = document.getElementById("link-fp-to-login");
 const linkRpToLogin = document.getElementById("link-rp-to-login");
+
+// Dashboard Tabs Elements
+const dashTabButtons = document.querySelectorAll(".dash-tab-btn");
+const dashPanels = document.querySelectorAll(".dash-panel");
+const dashGroupsBadge = document.getElementById("dash-groups-badge");
 
 // Signup Form Elements
 const signupForm = document.getElementById("signup-form");
@@ -75,7 +82,7 @@ const rpReqSpecial = document.getElementById("rp-req-special");
 const rpConfirmMatchHint = document.getElementById("rp-confirm-match-hint");
 const btnReset = document.getElementById("btn-reset");
 
-// Dashboard Elements
+// Dashboard Header Elements
 const dashAvatarImg = document.getElementById("dash-avatar-img");
 const avatarInput = document.getElementById("avatar-input");
 const dashAvatar = document.getElementById("dash-avatar");
@@ -86,10 +93,10 @@ const dashUsername = document.getElementById("dash-username");
 const dashEmail = document.getElementById("dash-email");
 const dashFullname = document.getElementById("dash-fullname");
 const dashJoined = document.getElementById("dash-joined");
-const dbUsersTbody = document.getElementById("db-users-tbody");
-const btnRefreshUsers = document.getElementById("btn-refresh-users");
 const btnLogout = document.getElementById("btn-logout");
 const toastContainer = document.getElementById("toast-container");
+
+// Calendar Availability Elements
 const calPrevBtn = document.getElementById("cal-prev-btn");
 const calNextBtn = document.getElementById("cal-next-btn");
 const calMonthYear = document.getElementById("cal-month-year");
@@ -102,8 +109,37 @@ const availStart = document.getElementById("avail-start");
 const availEnd = document.getElementById("avail-end");
 const dateSlotsList = document.getElementById("date-slots-list");
 
+// Groups Elements
+const createGroupForm = document.getElementById("create-group-form");
+const groupNameInput = document.getElementById("group-name");
+const groupDescInput = document.getElementById("group-desc");
+const btnCreateGroup = document.getElementById("btn-create-group");
+const groupsListContainer = document.getElementById("groups-list-container");
+const btnRefreshGroups = document.getElementById("btn-refresh-groups");
+
+// Group Details Modal Elements
+const groupDetailModal = document.getElementById("group-detail-modal");
+const modalGroupName = document.getElementById("modal-group-name");
+const modalGroupDesc = document.getElementById("modal-group-desc");
+const modalMembersCount = document.getElementById("modal-members-count");
+const groupMembersList = document.getElementById("group-members-list");
+const btnCloseGroupModal = document.getElementById("btn-close-group-modal");
+const groupOwnerAddMemberSection = document.getElementById("group-owner-add-member-section");
+const addMemberForm = document.getElementById("add-member-form");
+const addMemberIdentifier = document.getElementById("add-member-identifier");
+const btnAddMember = document.getElementById("btn-add-member");
+
+// Edit Profile Elements
+const btnToggleEditProfile = document.getElementById("btn-toggle-edit-profile");
+const editProfileForm = document.getElementById("edit-profile-form");
+const btnCancelEdit = document.getElementById("btn-cancel-edit");
+const editFullname = document.getElementById("edit-fullname");
+const editUsername = document.getElementById("edit-username");
+const btnDeleteAccount = document.getElementById("btn-delete-account");
+
 // Toast Notification Utility
 function showToast(message, type = "info", duration = 4000) {
+  if (!toastContainer) return;
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
   toast.textContent = message;
@@ -117,26 +153,26 @@ function showToast(message, type = "info", duration = 4000) {
   }, duration);
 }
 
-// Tab Switching (Default tab: login)
+// Auth Tab Switching
 function switchTab(target) {
-  signupView.classList.remove("active");
-  loginView.classList.remove("active");
+  signupView?.classList.remove("active");
+  loginView?.classList.remove("active");
   if (forgotView) forgotView.classList.remove("active");
   if (resetView) resetView.classList.remove("active");
 
-  tabSignupBtn.classList.remove("active");
-  tabSignupBtn.setAttribute("aria-selected", "false");
-  tabLoginBtn.classList.remove("active");
-  tabLoginBtn.setAttribute("aria-selected", "false");
+  tabSignupBtn?.classList.remove("active");
+  tabSignupBtn?.setAttribute("aria-selected", "false");
+  tabLoginBtn?.classList.remove("active");
+  tabLoginBtn?.setAttribute("aria-selected", "false");
 
   if (target === "signup") {
-    tabSignupBtn.classList.add("active");
-    tabSignupBtn.setAttribute("aria-selected", "true");
-    signupView.classList.add("active");
+    tabSignupBtn?.classList.add("active");
+    tabSignupBtn?.setAttribute("aria-selected", "true");
+    signupView?.classList.add("active");
   } else if (target === "login") {
-    tabLoginBtn.classList.add("active");
-    tabLoginBtn.setAttribute("aria-selected", "true");
-    loginView.classList.add("active");
+    tabLoginBtn?.classList.add("active");
+    tabLoginBtn?.setAttribute("aria-selected", "true");
+    loginView?.classList.add("active");
   } else if (target === "forgot") {
     if (forgotView) forgotView.classList.add("active");
   } else if (target === "reset") {
@@ -144,14 +180,44 @@ function switchTab(target) {
   }
 }
 
-tabSignupBtn.addEventListener("click", () => switchTab("signup"));
-tabLoginBtn.addEventListener("click", () => switchTab("login"));
-linkToLogin.addEventListener("click", () => switchTab("login"));
-linkToSignup.addEventListener("click", () => switchTab("signup"));
+// Dashboard Tab Switching
+function switchDashboardTab(targetPanelId) {
+  dashTabButtons.forEach((btn) => {
+    if (btn.getAttribute("data-target") === targetPanelId) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+
+  dashPanels.forEach((panel) => {
+    if (panel.id === targetPanelId) {
+      panel.classList.add("active");
+    } else {
+      panel.classList.remove("active");
+    }
+  });
+
+  if (targetPanelId === "panel-availability") {
+    renderCalendar();
+  }
+}
+
+dashTabButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const target = btn.getAttribute("data-target");
+    if (target) switchDashboardTab(target);
+  });
+});
+
+if (tabSignupBtn) tabSignupBtn.addEventListener("click", () => switchTab("signup"));
+if (tabLoginBtn) tabLoginBtn.addEventListener("click", () => switchTab("login"));
+if (linkToLogin) linkToLogin.addEventListener("click", () => switchTab("login"));
+if (linkToSignup) linkToSignup.addEventListener("click", () => switchTab("signup"));
 
 if (btnForgotPassword) {
   btnForgotPassword.addEventListener("click", () => {
-    const currentId = liIdentifier.value.trim();
+    const currentId = liIdentifier?.value.trim() || "";
     if (currentId.includes("@") && fpEmail) {
       fpEmail.value = currentId;
       validateFpEmail(currentId);
@@ -173,12 +239,12 @@ document.querySelectorAll(".toggle-password").forEach((button) => {
 
     if (input.type === "password") {
       input.type = "text";
-      eyeOpen.classList.add("hidden");
-      eyeClosed.classList.remove("hidden");
+      eyeOpen?.classList.add("hidden");
+      eyeClosed?.classList.remove("hidden");
     } else {
       input.type = "password";
-      eyeOpen.classList.remove("hidden");
-      eyeClosed.classList.add("hidden");
+      eyeOpen?.classList.remove("hidden");
+      eyeClosed?.classList.add("hidden");
     }
   });
 });
@@ -187,13 +253,11 @@ document.querySelectorAll(".toggle-password").forEach((button) => {
 function validateUsername(value) {
   const clean = value.trim();
   const valid = /^[a-zA-Z0-9_-]{3,30}$/.test(clean);
-
   if (!clean) {
     suUsername.classList.remove("valid-input", "invalid-input");
     valIconUsername.textContent = "";
     return false;
   }
-
   if (valid) {
     suUsername.classList.add("valid-input");
     suUsername.classList.remove("invalid-input");
@@ -202,7 +266,7 @@ function validateUsername(value) {
   } else {
     suUsername.classList.add("invalid-input");
     suUsername.classList.remove("valid-input");
-    valIconUsername.textContent = "✕";
+    valIconUsername.textContent = "✗";
     valIconUsername.style.color = "#ef4444";
   }
   return valid;
@@ -212,13 +276,11 @@ function validateEmail(value) {
   const clean = value.trim();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const valid = emailRegex.test(clean);
-
   if (!clean) {
     suEmail.classList.remove("valid-input", "invalid-input");
     valIconEmail.textContent = "";
     return false;
   }
-
   if (valid) {
     suEmail.classList.add("valid-input");
     suEmail.classList.remove("invalid-input");
@@ -227,7 +289,7 @@ function validateEmail(value) {
   } else {
     suEmail.classList.add("invalid-input");
     suEmail.classList.remove("valid-input");
-    valIconEmail.textContent = "✕";
+    valIconEmail.textContent = "✗";
     valIconEmail.style.color = "#ef4444";
   }
   return valid;
@@ -274,36 +336,38 @@ function evaluatePassword(pwd) {
     label = "Strong";
   }
 
-  passwordMeterFill.style.width = width;
-  passwordMeterFill.style.backgroundColor = color;
-  passwordStrengthText.textContent = label;
-  passwordStrengthText.style.color = color;
-
+  if (passwordMeterFill) {
+    passwordMeterFill.style.width = width;
+    passwordMeterFill.style.backgroundColor = color;
+  }
+  if (passwordStrengthText) {
+    passwordStrengthText.textContent = label;
+    passwordStrengthText.style.color = color;
+  }
   return passedCount === 5;
 }
 
 function updateReqItem(element, isMet) {
+  if (!element) return;
   const bullet = element.querySelector(".req-bullet");
   if (isMet) {
     element.classList.add("met");
-    bullet.textContent = "✓";
+    if (bullet) bullet.textContent = "✓";
   } else {
     element.classList.remove("met");
-    bullet.textContent = "•";
+    if (bullet) bullet.textContent = "•";
   }
 }
 
 function checkPasswordMatch() {
   const pwd = suPassword.value;
   const confirm = suConfirmPassword.value;
-
   if (!confirm) {
     confirmMatchHint.textContent = "";
     confirmMatchHint.className = "field-hint";
     suConfirmPassword.classList.remove("valid-input", "invalid-input");
     return false;
   }
-
   if (pwd === confirm) {
     confirmMatchHint.textContent = "✓ Passwords match";
     confirmMatchHint.className = "field-hint success";
@@ -311,7 +375,7 @@ function checkPasswordMatch() {
     suConfirmPassword.classList.remove("invalid-input");
     return true;
   } else {
-    confirmMatchHint.textContent = "✕ Passwords do not match";
+    confirmMatchHint.textContent = "✗ Passwords do not match";
     confirmMatchHint.className = "field-hint error";
     suConfirmPassword.classList.add("invalid-input");
     suConfirmPassword.classList.remove("valid-input");
@@ -319,129 +383,135 @@ function checkPasswordMatch() {
   }
 }
 
-// Event Listeners for Live Form Feedback
-suUsername.addEventListener("input", (e) => validateUsername(e.target.value));
-suEmail.addEventListener("input", (e) => validateEmail(e.target.value));
-suPassword.addEventListener("input", (e) => {
+if (suUsername) suUsername.addEventListener("input", (e) => validateUsername(e.target.value));
+if (suEmail) suEmail.addEventListener("input", (e) => validateEmail(e.target.value));
+if (suPassword) suPassword.addEventListener("input", (e) => {
   evaluatePassword(e.target.value);
-  if (suConfirmPassword.value) checkPasswordMatch();
+  if (suConfirmPassword?.value) checkPasswordMatch();
 });
-suConfirmPassword.addEventListener("input", checkPasswordMatch);
+if (suConfirmPassword) suConfirmPassword.addEventListener("input", checkPasswordMatch);
 
 // Signup Form Submit Handler
-signupForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const username = suUsername.value.trim();
-  const email = suEmail.value.trim();
-  const fullName = suFullName.value.trim() || null;
-  const password = suPassword.value;
-  const confirmPassword = suConfirmPassword.value;
+if (signupForm) {
+  signupForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = suUsername.value.trim();
+    const email = suEmail.value.trim();
+    const fullName = suFullName.value.trim() || null;
+    const password = suPassword.value;
+    const confirmPassword = suConfirmPassword.value;
 
-  if (!validateUsername(username)) {
-    showToast("Please enter a valid username (3-30 chars, alphanumeric).", "error");
-    suUsername.focus();
-    return;
-  }
-  if (!validateEmail(email)) {
-    showToast("Please enter a valid email address.", "error");
-    suEmail.focus();
-    return;
-  }
-  if (!evaluatePassword(password)) {
-    showToast("Please ensure password satisfies all strength criteria.", "error");
-    suPassword.focus();
-    return;
-  }
-  if (password !== confirmPassword) {
-    showToast("Passwords do not match.", "error");
-    suConfirmPassword.focus();
-    return;
-  }
-  if (!suTerms.checked) {
-    showToast("Please agree to the Terms of Service to continue.", "error");
-    return;
-  }
-
-  setButtonLoading(btnSignup, true);
-  try {
-    const response = await fetch("/api/auth/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username,
-        email,
-        full_name: fullName,
-        password,
-        confirm_password: confirmPassword,
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      const errMsg = Array.isArray(data.detail)
-        ? data.detail.map((d) => d.msg).join(", ")
-        : data.detail || "Registration failed.";
-      throw new Error(errMsg);
+    if (!validateUsername(username)) {
+      showToast("Please enter a valid username (3-30 chars, alphanumeric).", "error");
+      suUsername.focus();
+      return;
     }
-    showToast(data.message || "Account created! Check your email to verify before signing in.", "success", 7000);
-    signupForm.reset();
-    evaluatePassword("");
-    liIdentifier.value = username;
-    switchTab("login");
-  } catch (err) {
-    showToast(err.message, "error");
-  } finally {
-    setButtonLoading(btnSignup, false);
-  }
-});
+    if (!validateEmail(email)) {
+      showToast("Please enter a valid email address.", "error");
+      suEmail.focus();
+      return;
+    }
+    if (!evaluatePassword(password)) {
+      showToast("Please ensure password satisfies all strength criteria.", "error");
+      suPassword.focus();
+      return;
+    }
+    if (password !== confirmPassword) {
+      showToast("Passwords do not match.", "error");
+      suConfirmPassword.focus();
+      return;
+    }
+    if (suTerms && !suTerms.checked) {
+      showToast("Please agree to the Terms of Service to continue.", "error");
+      return;
+    }
+
+    setButtonLoading(btnSignup, true);
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          email,
+          full_name: fullName,
+          password,
+          confirm_password: confirmPassword,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        const errMsg = Array.isArray(data.detail)
+          ? data.detail.map((d) => d.msg).join(", ")
+          : data.detail || "Registration failed.";
+        throw new Error(errMsg);
+      }
+
+      showToast(data.message || "Account created! Check your email to verify before signing in.", "success", 7000);
+      signupForm.reset();
+      evaluatePassword("");
+      if (liIdentifier) liIdentifier.value = username;
+      switchTab("login");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setButtonLoading(btnSignup, false);
+    }
+  });
+}
 
 // Login Form Submit Handler
-loginForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const identifier = liIdentifier.value.trim();
-  const password = liPassword.value;
+if (loginForm) {
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const identifier = liIdentifier.value.trim();
+    const password = liPassword.value;
 
-  if (!identifier) {
-    showToast("Please enter your username or email.", "error");
-    liIdentifier.focus();
-    return;
-  }
-  if (!password) {
-    showToast("Please enter your password.", "error");
-    liPassword.focus();
-    return;
-  }
-
-  setButtonLoading(btnLogin, true);
-  try {
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier, password }),
-    });
-
-    if (!(response.headers.get("content-type") || "").includes("application/json")) {
-      throw new Error("The server could not process your login. Please try again shortly.");
+    if (!identifier) {
+      showToast("Please enter your username or email.", "error");
+      liIdentifier.focus();
+      return;
+    }
+    if (!password) {
+      showToast("Please enter your password.", "error");
+      liPassword.focus();
+      return;
     }
 
-    const data = await response.json();
-    if (!response.ok) {
-      if (response.status === 403 && data.detail && data.detail.toLowerCase().includes("verify")) {
-        showToast(data.detail, "error", 7000);
-        if (resendSection) resendSection.classList.remove("hidden");
-        return;
+    setButtonLoading(btnLogin, true);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, password }),
+      });
+
+      if (!(response.headers.get("content-type") || "").includes("application/json")) {
+        throw new Error("The server could not process your login. Please try again shortly.");
       }
-      throw new Error(data.detail || "Login failed.");
+
+      const data = await response.json();
+      if (!response.ok) {
+        if (response.status === 403 && data.detail && data.detail.toLowerCase().includes("verify")) {
+          showToast(data.detail, "error", 7000);
+          if (resendSection) resendSection.classList.remove("hidden");
+          return;
+        }
+        throw new Error(data.detail || "Login failed.");
+      }
+
+      showToast("Signed in successfully!", "success");
+      handleAuthSuccess(data);
+      loginForm.reset();
+      if (resendSection) resendSection.classList.add("hidden");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setButtonLoading(btnLogin, false);
     }
-    showToast("Signed in successfully!", "success");
-    handleAuthSuccess(data);
-    loginForm.reset();
-    if (resendSection) resendSection.classList.add("hidden");
-  } catch (err) {
-    showToast(err.message, "error");
-  } finally {
-    setButtonLoading(btnLogin, false);
-  }
-});
+  });
+}
 
 // Resend Verification Email Listener
 if (btnResendVerification) {
@@ -471,13 +541,11 @@ function validateFpEmail(value) {
   const clean = value.trim();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const valid = emailRegex.test(clean);
-
   if (!clean) {
     fpEmail.classList.remove("valid-input", "invalid-input");
     valIconFpEmail.textContent = "";
     return false;
   }
-
   if (valid) {
     fpEmail.classList.add("valid-input");
     fpEmail.classList.remove("invalid-input");
@@ -486,7 +554,7 @@ function validateFpEmail(value) {
   } else {
     fpEmail.classList.add("invalid-input");
     fpEmail.classList.remove("valid-input");
-    valIconFpEmail.textContent = "✕";
+    valIconFpEmail.textContent = "✗";
     valIconFpEmail.style.color = "#ef4444";
   }
   return valid;
@@ -514,10 +582,12 @@ if (forgotForm) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
+
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.detail || "Failed to request password reset.");
       }
+
       showToast(
         data.message || "If an account with this email exists, a password reset link has been sent.",
         "success",
@@ -576,34 +646,35 @@ function evaluateResetPassword(pwd) {
     label = "Strong";
   }
 
-  rpPasswordMeterFill.style.width = width;
-  rpPasswordMeterFill.style.backgroundColor = color;
-  rpPasswordStrengthText.textContent = label;
-  rpPasswordStrengthText.style.color = color;
-
+  if (rpPasswordMeterFill) {
+    rpPasswordMeterFill.style.width = width;
+    rpPasswordMeterFill.style.backgroundColor = color;
+  }
+  if (rpPasswordStrengthText) {
+    rpPasswordStrengthText.textContent = label;
+    rpPasswordStrengthText.style.color = color;
+  }
   return passedCount === 5;
 }
 
 function checkResetPasswordMatch() {
   const pwd = rpPassword.value;
   const confirm = rpConfirmPassword.value;
-
   if (!confirm) {
     rpConfirmMatchHint.textContent = "";
     rpConfirmMatchHint.className = "field-hint";
     rpConfirmPassword.classList.remove("valid-input", "invalid-input");
     return false;
   }
-
   if (pwd === confirm) {
     rpConfirmMatchHint.textContent = "✓ Passwords match";
-    rpConfirmMatchHint.className = "field-hint success";
+    confirmMatchHint.className = "field-hint success";
     rpConfirmPassword.classList.add("valid-input");
     rpConfirmPassword.classList.remove("invalid-input");
     return true;
   } else {
-    rpConfirmMatchHint.textContent = "✕ Passwords do not match";
-    rpConfirmMatchHint.className = "field-hint error";
+    rpConfirmMatchHint.textContent = "✗ Passwords do not match";
+    confirmMatchHint.className = "field-hint error";
     rpConfirmPassword.classList.add("invalid-input");
     rpConfirmPassword.classList.remove("valid-input");
     return false;
@@ -616,7 +687,6 @@ if (rpPassword) {
     if (rpConfirmPassword && rpConfirmPassword.value) checkResetPasswordMatch();
   });
 }
-
 if (rpConfirmPassword) {
   rpConfirmPassword.addEventListener("input", checkResetPasswordMatch);
 }
@@ -655,10 +725,12 @@ if (resetForm) {
           confirm_password: confirmPassword,
         }),
       });
+
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.detail || "Password reset failed.");
       }
+
       showToast(
         data.message || "Your password has been successfully reset! You can now log in.",
         "success",
@@ -681,8 +753,9 @@ function handleAuthSuccess(authData) {
   state.currentUser = authData.user;
   localStorage.setItem("token", authData.access_token);
   renderDashboard(authData.user);
-  loadDatabaseUsers();
   loadAvailabilities();
+  loadUserGroups();
+  switchDashboardTab("panel-account");
 }
 
 // Dashboard Rendering
@@ -718,48 +791,6 @@ function renderDashboard(user) {
   });
 }
 
-// Fetch Registered Users from Database
-async function loadDatabaseUsers() {
-  dbUsersTbody.innerHTML = `<tr><td colspan="5" class="table-loading">Loading users from SQLite...</td></tr>`;
-  try {
-    const response = await fetch("/api/users");
-    if (!response.ok) throw new Error("Failed to fetch database users");
-    const users = await response.json();
-
-    if (users.length === 0) {
-      dbUsersTbody.innerHTML = `<tr><td colspan="5" class="table-loading">No users found in database.</td></tr>`;
-      return;
-    }
-
-    dbUsersTbody.innerHTML = users
-      .map((u) => {
-        const d = new Date(u.created_at);
-        const formatted = d.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        return `
-        <tr>
-          <td><strong>#${u.id}</strong></td>
-          <td>@${escapeHtml(u.username)}</td>
-          <td>${escapeHtml(u.email)}</td>
-          <td>${escapeHtml(u.full_name || "")}</td>
-          <td>${formatted}</td>
-        </tr>
-      `;
-      })
-      .join("");
-  } catch (err) {
-    dbUsersTbody.innerHTML = `<tr><td colspan="5" class="table-loading" style="color: #f87171;">Error loading users from database</td></tr>`;
-  }
-}
-
-if (btnRefreshUsers) {
-  btnRefreshUsers.addEventListener("click", loadDatabaseUsers);
-}
-
 // Logout Handler
 btnLogout.addEventListener("click", () => {
   state.token = null;
@@ -773,16 +804,17 @@ btnLogout.addEventListener("click", () => {
 
 // Helper: Button Loading State
 function setButtonLoading(button, isLoading) {
+  if (!button) return;
   const textSpan = button.querySelector(".btn-text");
   const spinner = button.querySelector(".spinner");
   if (isLoading) {
     button.disabled = true;
-    textSpan.classList.add("hidden");
-    spinner.classList.remove("hidden");
+    textSpan?.classList.add("hidden");
+    spinner?.classList.remove("hidden");
   } else {
     button.disabled = false;
-    textSpan.classList.remove("hidden");
-    spinner.classList.add("hidden");
+    textSpan?.classList.remove("hidden");
+    spinner?.classList.add("hidden");
   }
 }
 
@@ -801,7 +833,6 @@ function escapeHtml(str) {
 async function checkEmailVerificationParam() {
   const params = new URLSearchParams(window.location.search);
   if (params.get("reset_token") || window.location.pathname.includes("reset-password")) return;
-
   const token = params.get("token");
   if (!token) return;
 
@@ -827,7 +858,6 @@ async function checkPasswordResetParam() {
   const resetToken =
     params.get("reset_token") ||
     (window.location.pathname.includes("reset-password") ? params.get("token") : null);
-
   if (!resetToken) return;
 
   try {
@@ -861,14 +891,15 @@ async function checkExistingSession() {
       const user = await response.json();
       state.currentUser = user;
       renderDashboard(user);
-      loadDatabaseUsers();
       loadAvailabilities();
+      loadUserGroups();
+      switchDashboardTab("panel-account");
     } else {
       localStorage.removeItem("token");
       state.token = null;
     }
   } catch (e) {
-    // Leave at Sign In on connection failure
+    // Session load failure fallback
   }
 }
 
@@ -896,10 +927,11 @@ if (avatarInput) {
         body: formData,
       });
 
-      const data = await response.json();
+      const data = await res.json();
       if (!res.ok) {
         throw new Error(data.detail || "Failed to upload avatar");
       }
+
       state.currentUser = data;
       renderDashboard(data);
       showToast("Profile picture updated!", "success");
@@ -911,18 +943,12 @@ if (avatarInput) {
   });
 }
 
-// Boot application
-switchTab("login");
-checkEmailVerificationParam();
-checkPasswordResetParam();
-checkExistingSession();
-
 // ==================== CALENDAR AVAILABILITY ====================
 async function loadAvailabilities() {
   if (!state.token) return;
   try {
     const res = await fetch("/api/availability", {
-      headers: { Authorization: `Bearer ${state.token}` }
+      headers: { Authorization: `Bearer ${state.token}` },
     });
     if (res.ok) {
       state.userAvailabilities = await res.json();
@@ -938,10 +964,12 @@ function renderCalendar() {
   if (!calDaysGrid) return;
   const year = state.currentCalDate.getFullYear();
   const month = state.currentCalDate.getMonth();
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
 
-  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  calMonthYear.textContent = `${monthNames[month]} ${year}`;
-
+  if (calMonthYear) calMonthYear.textContent = `${monthNames[month]} ${year}`;
   calDaysGrid.innerHTML = "";
 
   const firstDayIndex = new Date(year, month, 1).getDay();
@@ -963,6 +991,7 @@ function renderCalendar() {
     if (state.userAvailabilities.some((a) => a.date === dateStr)) {
       cell.classList.add("has-slots");
     }
+
     if (state.selectedDateStr === dateStr) {
       cell.classList.add("selected");
     }
@@ -983,7 +1012,11 @@ function selectCalendarDate(dateStr) {
   availabilityForm.classList.remove("hidden");
 
   const [y, m, d] = dateStr.split("-");
-  calSelectedDateText.textContent = `Slots for ${new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  calSelectedDateText.textContent = `Slots for ${new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })}`;
   renderSlotsForDate(dateStr);
 }
 
@@ -1013,7 +1046,7 @@ window.deleteSlot = async function (slotId) {
   try {
     const res = await fetch(`/api/availability/${slotId}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${state.token}` }
+      headers: { Authorization: `Bearer ${state.token}` },
     });
     if (!res.ok) throw new Error("Could not delete slot");
     showToast("Availability slot removed", "info");
@@ -1041,19 +1074,18 @@ if (availabilityForm) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${state.token}`
+          Authorization: `Bearer ${state.token}`,
         },
         body: JSON.stringify({
           date: dateVal,
           start_time: startTime + ":00",
           end_time: endTime + ":00",
-          title: titleVal
-        })
+          title: titleVal,
+        }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to add slot");
-
       showToast("Slot added!", "success");
       await loadAvailabilities();
     } catch (err) {
@@ -1077,13 +1109,6 @@ if (calNextBtn) {
 }
 
 // ==================== EDIT & DELETE PROFILE ====================
-const btnToggleEditProfile = document.getElementById("btn-toggle-edit-profile");
-const editProfileForm = document.getElementById("edit-profile-form");
-const btnCancelEdit = document.getElementById("btn-cancel-edit");
-const editFullname = document.getElementById("edit-fullname");
-const editUsername = document.getElementById("edit-username");
-const btnDeleteAccount = document.getElementById("btn-delete-account");
-
 if (btnToggleEditProfile) {
   btnToggleEditProfile.addEventListener("click", () => {
     if (state.currentUser) {
@@ -1139,10 +1164,8 @@ if (btnDeleteAccount) {
         method: "DELETE",
         headers: { Authorization: `Bearer ${state.token}` },
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to delete account.");
-
       showToast("Account deleted.", "info");
       btnLogout.click();
     } catch (err) {
@@ -1151,11 +1174,214 @@ if (btnDeleteAccount) {
   });
 }
 
-// ==================== CREATE GROUP (SCRUM-40) ====================
-const createGroupForm = document.getElementById("create-group-form");
-const groupNameInput = document.getElementById("group-name");
-const groupDescInput = document.getElementById("group-desc");
-const btnCreateGroup = document.getElementById("btn-create-group");
+// ==================== GROUPS & MEMBERS LOGIC ====================
+async function loadUserGroups() {
+  if (!state.token || !groupsListContainer) return;
+  try {
+    const res = await fetch("/api/groups", {
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    if (!res.ok) throw new Error("Failed to load groups");
+    const groups = await res.json();
+    state.userGroups = groups;
+    if (dashGroupsBadge) {
+      dashGroupsBadge.textContent = groups.length;
+    }
+    renderUserGroups();
+  } catch (e) {
+    if (groupsListContainer) {
+      groupsListContainer.innerHTML = `<p class="cal-empty-slots" style="color: #f87171;">Failed to load groups.</p>`;
+    }
+  }
+}
+
+function renderUserGroups() {
+  if (!groupsListContainer) return;
+  if (!state.userGroups || state.userGroups.length === 0) {
+    groupsListContainer.innerHTML = `<p class="cal-empty-slots">You have not joined or created any groups yet.</p>`;
+    return;
+  }
+
+  groupsListContainer.innerHTML = state.userGroups
+    .map(
+      (g) => `
+      <div class="slot-item group-clickable-card" onclick="openGroupDetail(${g.id})" style="padding: 0.85rem; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <strong style="font-size: 0.95rem; display: block; color: var(--accent);">${escapeHtml(g.name)}</strong>
+          ${g.description ? `<p style="color: var(--text-secondary); font-size: 0.78rem; margin: 3px 0 0;">${escapeHtml(g.description)}</p>` : ""}
+          <div style="color: var(--text-muted); font-size: 0.72rem; margin-top: 5px;">
+            ${g.member_count} member${g.member_count > 1 ? "s" : ""} • Click to inspect members & schedule
+          </div>
+        </div>
+        <span class="badge ${g.owner_id === state.currentUser?.id ? "badge-success" : ""}">
+          ${g.owner_id === state.currentUser?.id ? "Owner" : "Member"}
+        </span>
+      </div>
+    `
+    )
+    .join("");
+}
+
+window.openGroupDetail = async function (groupId) {
+  const group = state.userGroups.find((g) => g.id === groupId);
+  if (!group) return;
+
+  state.selectedGroup = group;
+  modalGroupName.textContent = group.name;
+  modalGroupDesc.textContent = group.description || "No description provided.";
+  modalMembersCount.textContent = `${group.member_count} member${group.member_count > 1 ? "s" : ""}`;
+
+  // Show Add Member section only if current user is owner
+  if (state.currentUser && group.owner_id === state.currentUser.id) {
+    groupOwnerAddMemberSection.classList.remove("hidden");
+  } else {
+    groupOwnerAddMemberSection.classList.add("hidden");
+  }
+
+  groupDetailModal.classList.remove("hidden");
+  await loadGroupMembers(groupId);
+};
+
+async function loadGroupMembers(groupId) {
+  groupMembersList.innerHTML = `<p class="cal-empty-slots">Loading members and availability...</p>`;
+  try {
+    const res = await fetch(`/api/groups/${groupId}/members`, {
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    if (!res.ok) throw new Error("Failed to load group members.");
+    const members = await res.json();
+    renderGroupMembers(members);
+  } catch (err) {
+    groupMembersList.innerHTML = `<p class="cal-empty-slots" style="color: #f87171;">${err.message}</p>`;
+  }
+}
+
+function renderGroupMembers(members) {
+  if (!members || members.length === 0) {
+    groupMembersList.innerHTML = `<p class="cal-empty-slots">No members found in this group.</p>`;
+    return;
+  }
+
+  const isOwner = state.currentUser && state.selectedGroup && state.selectedGroup.owner_id === state.currentUser.id;
+
+  groupMembersList.innerHTML = members
+    .map((m) => {
+      // Format Member's Availabilities
+      let availHtml = "";
+      if (m.availabilities && m.availabilities.length > 0) {
+        availHtml = `
+          <div class="member-avail-pills">
+            ${m.availabilities
+              .map(
+                (a) => `
+              <span class="avail-pill">
+                <strong>${escapeHtml(a.date)}</strong>: ${a.start_time.slice(0, 5)} - ${a.end_time.slice(0, 5)} (${escapeHtml(a.title)})
+              </span>
+            `
+              )
+              .join("")}
+          </div>
+        `;
+      } else {
+        availHtml = `<div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px; font-style: italic;">No availability registered yet.</div>`;
+      }
+
+      // Remove button for Owner (except on the owner themselves)
+      const canRemove = isOwner && m.user_id !== state.selectedGroup.owner_id;
+      const removeBtn = canRemove
+        ? `<button type="button" class="btn-del-slot" onclick="removeMember(${m.user_id})" title="Remove member" style="color: #f87171; font-size: 1.1rem; cursor: pointer;">&times;</button>`
+        : "";
+
+      return `
+        <div class="member-card">
+          <div class="member-card-header">
+            <div>
+              <strong style="color: var(--text-main); font-size: 0.9rem;">
+                ${escapeHtml(m.full_name || "No name provided")}
+              </strong>
+              <span style="color: var(--accent); font-size: 0.8rem; margin-left: 0.35rem;">
+                @${escapeHtml(m.username)}
+              </span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span class="badge ${m.role === "owner" ? "badge-success" : ""}">${m.role}</span>
+              ${removeBtn}
+            </div>
+          </div>
+          ${availHtml}
+        </div>
+      `;
+    })
+    .join("");
+}
+
+// Remove member logic (Owner only)
+window.removeMember = async function (userId) {
+  if (!state.selectedGroup) return;
+  const confirmed = confirm("Are you sure you want to remove this member from the group?");
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`/api/groups/${state.selectedGroup.id}/members/${userId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Failed to remove member.");
+
+    showToast(data.message || "Member removed.", "info");
+    await loadGroupMembers(state.selectedGroup.id);
+    await loadUserGroups();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+};
+
+// Add member logic (Owner only)
+if (addMemberForm) {
+  addMemberForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!state.selectedGroup) return;
+
+    const identifier = addMemberIdentifier.value.trim();
+    if (!identifier) return;
+
+    setButtonLoading(btnAddMember, true);
+    try {
+      const res = await fetch(`/api/groups/${state.selectedGroup.id}/members`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${state.token}`,
+        },
+        body: JSON.stringify({ identifier }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to add member.");
+
+      showToast(data.message || "Member added!", "success");
+      addMemberForm.reset();
+      await loadGroupMembers(state.selectedGroup.id);
+      await loadUserGroups();
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setButtonLoading(btnAddMember, false);
+    }
+  });
+}
+
+// Close Modal
+if (btnCloseGroupModal) {
+  btnCloseGroupModal.addEventListener("click", () => {
+    groupDetailModal.classList.add("hidden");
+    state.selectedGroup = null;
+  });
+}
+
+if (btnRefreshGroups) {
+  btnRefreshGroups.addEventListener("click", loadUserGroups);
+}
 
 if (createGroupForm) {
   createGroupForm.addEventListener("submit", async (e) => {
@@ -1187,6 +1413,8 @@ if (createGroupForm) {
 
       showToast(`Group "${data.name}" created successfully!`, "success", 5000);
       createGroupForm.reset();
+      await loadUserGroups();
+      switchDashboardTab("panel-groups");
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -1194,3 +1422,9 @@ if (createGroupForm) {
     }
   });
 }
+
+// Boot application
+switchTab("login");
+checkEmailVerificationParam();
+checkPasswordResetParam();
+checkExistingSession();
