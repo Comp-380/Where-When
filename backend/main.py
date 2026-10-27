@@ -4,7 +4,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import (
     BackgroundTasks,
@@ -12,6 +12,7 @@ from fastapi import (
     FastAPI,
     File,
     HTTPException,
+    Query,
     UploadFile,
     status,
 )
@@ -33,12 +34,19 @@ from backend.auth import (
     verify_password,
     verify_password_reset_token,
 )
+from backend.availability_service import (
+    compute_mutual_intervals,
+    minutes_to_time,
+    time_to_minutes,
+)
 from backend.database import Base, engine, get_db, initialize_database
 from backend.models import User, Availability, Group, GroupMember, generate_invite_code
 from backend.schemas import (
     AvailabilityCreate,
     AvailabilityResponse,
+    CommonAvailabilitySlot,
     ForgotPasswordRequest,
+    GroupAvailabilityResponse,
     GroupCreate,
     GroupJoinRequest,
     GroupMemberResponse,
@@ -388,6 +396,122 @@ def leave_group(
     db.commit()
 
     return MessageResponse(message=f"You have left '{group.name}'.")
+
+
+@app.get(
+    "/api/groups/{group_id}/availability",
+    response_model=GroupAvailabilityResponse,
+    summary="Get group members' schedules and shared times when members are free",
+)
+def get_group_availability(
+    group_id: int,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    user_ids: Optional[List[int]] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+
+    user_mem = (
+        db.query(GroupMember)
+        .filter(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id)
+        .first()
+    )
+    if not user_mem:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+
+    all_members = (
+        db.query(GroupMember, User)
+        .join(User, GroupMember.user_id == User.id)
+        .filter(GroupMember.group_id == group_id)
+        .all()
+    )
+
+    filtered_members = all_members
+    if user_ids:
+        filtered_members = [(m, u) for m, u in all_members if u.id in user_ids]
+        if not filtered_members:
+            filtered_members = all_members
+
+    members_response = []
+    dates_map: Dict[date, Dict[str, List[Tuple[int, int]]]] = {}
+
+    for mem, usr in filtered_members:
+        query = db.query(Availability).filter(Availability.user_id == usr.id)
+        if start_date:
+            query = query.filter(Availability.date >= start_date)
+        if end_date:
+            query = query.filter(Availability.date <= end_date)
+        slots = query.order_by(Availability.date.asc(), Availability.start_time.asc()).all()
+
+        members_response.append(
+            GroupMemberResponse(
+                id=mem.id,
+                user_id=usr.id,
+                username=usr.username,
+                full_name=usr.full_name,
+                role=mem.role,
+                joined_at=mem.joined_at,
+                availabilities=[AvailabilityResponse.model_validate(s) for s in slots],
+            )
+        )
+
+        for s in slots:
+            if s.date not in dates_map:
+                dates_map[s.date] = {}
+            if usr.username not in dates_map[s.date]:
+                dates_map[s.date][usr.username] = []
+            dates_map[s.date][usr.username].append(
+                (time_to_minutes(s.start_time), time_to_minutes(s.end_time))
+            )
+
+    total_considered = len(filtered_members)
+    all_shared_slots: List[CommonAvailabilitySlot] = []
+    all_partial_slots: List[CommonAvailabilitySlot] = []
+
+    for d in sorted(dates_map.keys()):
+        day_user_intervals = dates_map[d]
+        mutual = compute_mutual_intervals(day_user_intervals, total_considered)
+
+        for slot in mutual["shared_slots"]:
+            all_shared_slots.append(
+                CommonAvailabilitySlot(
+                    date=d,
+                    start_time=minutes_to_time(slot["start"]),
+                    end_time=minutes_to_time(slot["end"]),
+                    available_member_count=slot["count"],
+                    total_member_count=total_considered,
+                    is_everyone=True,
+                    available_users=slot["users"],
+                )
+            )
+
+        for slot in mutual["partial_slots"]:
+            is_ev = slot["count"] == total_considered
+            all_partial_slots.append(
+                CommonAvailabilitySlot(
+                    date=d,
+                    start_time=minutes_to_time(slot["start"]),
+                    end_time=minutes_to_time(slot["end"]),
+                    available_member_count=slot["count"],
+                    total_member_count=total_considered,
+                    is_everyone=is_ev,
+                    available_users=slot["users"],
+                )
+            )
+
+    return GroupAvailabilityResponse(
+        group_id=group.id,
+        group_name=group.name,
+        total_members=total_considered,
+        members=members_response,
+        shared_slots=all_shared_slots,
+        partial_slots=all_partial_slots,
+    )
+
 
 
 @app.get(
