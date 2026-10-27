@@ -117,10 +117,18 @@ const btnCreateGroup = document.getElementById("btn-create-group");
 const groupsListContainer = document.getElementById("groups-list-container");
 const btnRefreshGroups = document.getElementById("btn-refresh-groups");
 
+// Join Group Elements
+const joinGroupForm = document.getElementById("join-group-form");
+const joinInviteCodeInput = document.getElementById("join-invite-code");
+const btnJoinGroup = document.getElementById("btn-join-group");
+
 // Group Details Modal Elements
 const groupDetailModal = document.getElementById("group-detail-modal");
 const modalGroupName = document.getElementById("modal-group-name");
 const modalGroupDesc = document.getElementById("modal-group-desc");
+const modalGroupInviteCode = document.getElementById("modal-group-invite-code");
+const btnCopyInviteCode = document.getElementById("btn-copy-invite-code");
+const btnCopyInviteLink = document.getElementById("btn-copy-invite-link");
 const modalMembersCount = document.getElementById("modal-members-count");
 const groupMembersList = document.getElementById("group-members-list");
 const btnCloseGroupModal = document.getElementById("btn-close-group-modal");
@@ -128,6 +136,8 @@ const groupOwnerAddMemberSection = document.getElementById("group-owner-add-memb
 const addMemberForm = document.getElementById("add-member-form");
 const addMemberIdentifier = document.getElementById("add-member-identifier");
 const btnAddMember = document.getElementById("btn-add-member");
+const modalLeaveGroupSection = document.getElementById("modal-leave-group-section");
+const btnLeaveGroup = document.getElementById("btn-leave-group");
 
 // Edit Profile Elements
 const btnToggleEditProfile = document.getElementById("btn-toggle-edit-profile");
@@ -755,7 +765,11 @@ function handleAuthSuccess(authData) {
   renderDashboard(authData.user);
   loadAvailabilities();
   loadUserGroups();
-  switchDashboardTab("panel-account");
+  if (sessionStorage.getItem("pending_join_code")) {
+    handlePendingJoinCode();
+  } else {
+    switchDashboardTab("panel-account");
+  }
 }
 
 // Dashboard Rendering
@@ -880,7 +894,10 @@ async function checkPasswordResetParam() {
 
 // Initial Session Check
 async function checkExistingSession() {
-  if (!state.token) return;
+  if (!state.token) {
+    checkJoinGroupParam();
+    return;
+  }
   try {
     const response = await fetch("/api/auth/me", {
       headers: {
@@ -893,13 +910,20 @@ async function checkExistingSession() {
       renderDashboard(user);
       loadAvailabilities();
       loadUserGroups();
-      switchDashboardTab("panel-account");
+      if (sessionStorage.getItem("pending_join_code")) {
+        handlePendingJoinCode();
+      } else {
+        switchDashboardTab("panel-account");
+      }
+      checkJoinGroupParam();
     } else {
       localStorage.removeItem("token");
       state.token = null;
+      checkJoinGroupParam();
     }
   } catch (e) {
     // Session load failure fallback
+    checkJoinGroupParam();
   }
 }
 
@@ -1175,6 +1199,61 @@ if (btnDeleteAccount) {
 }
 
 // ==================== GROUPS & MEMBERS LOGIC ====================
+async function copyToClipboard(text, successMsg) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand("copy");
+      textArea.remove();
+    }
+    showToast(successMsg, "success");
+  } catch (err) {
+    showToast("Failed to copy to clipboard", "error");
+  }
+}
+
+function checkJoinGroupParam() {
+  const params = new URLSearchParams(window.location.search);
+  const joinCode = params.get("join");
+  if (!joinCode) return;
+
+  const code = joinCode.trim().toUpperCase();
+
+  if (state.token && state.currentUser) {
+    if (joinInviteCodeInput) {
+      joinInviteCodeInput.value = code;
+    }
+    switchDashboardTab("panel-groups");
+    showToast(`Invite code ${code} detected. Click 'Join Group' to join.`, "info", 5000);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } else {
+    sessionStorage.setItem("pending_join_code", code);
+    showToast(`Group invite detected (${code})! Please sign in or create an account to join.`, "info", 6000);
+    switchTab("login");
+  }
+}
+
+function handlePendingJoinCode() {
+  const pendingCode = sessionStorage.getItem("pending_join_code");
+  if (pendingCode) {
+    sessionStorage.removeItem("pending_join_code");
+    if (joinInviteCodeInput) {
+      joinInviteCodeInput.value = pendingCode;
+    }
+    switchDashboardTab("panel-groups");
+    showToast(`Invite code ${pendingCode} ready. Click 'Join Group' to join!`, "info", 6000);
+  }
+}
+
 async function loadUserGroups() {
   if (!state.token || !groupsListContainer) return;
   try {
@@ -1203,22 +1282,33 @@ function renderUserGroups() {
   }
 
   groupsListContainer.innerHTML = state.userGroups
-    .map(
-      (g) => `
-      <div class="slot-item group-clickable-card" onclick="openGroupDetail(${g.id})" style="padding: 0.85rem; display: flex; justify-content: space-between; align-items: center;">
-        <div>
-          <strong style="font-size: 0.95rem; display: block; color: var(--accent);">${escapeHtml(g.name)}</strong>
-          ${g.description ? `<p style="color: var(--text-secondary); font-size: 0.78rem; margin: 3px 0 0;">${escapeHtml(g.description)}</p>` : ""}
-          <div style="color: var(--text-muted); font-size: 0.72rem; margin-top: 5px;">
-            ${g.member_count} member${g.member_count > 1 ? "s" : ""} • Click to inspect members & schedule
+    .map((g) => {
+      const isOwner = state.currentUser && g.owner_id === state.currentUser.id;
+      return `
+        <div class="slot-item group-clickable-card" onclick="openGroupDetail(${g.id})" style="padding: 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <strong style="font-size: 0.95rem; color: var(--accent);">${escapeHtml(g.name)}</strong>
+              ${g.invite_code ? `<span class="badge" style="background: rgba(255, 255, 255, 0.08); font-family: monospace; font-size: 0.7rem; letter-spacing: 0.5px;">Code: ${escapeHtml(g.invite_code)}</span>` : ""}
+            </div>
+            ${g.description ? `<p style="color: var(--text-secondary); font-size: 0.78rem; margin: 3px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(g.description)}</p>` : ""}
+            <div style="color: var(--text-muted); font-size: 0.72rem; margin-top: 5px;">
+              ${g.member_count} member${g.member_count > 1 ? "s" : ""} • Click to inspect members & schedule
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;" onclick="event.stopPropagation()">
+            <span class="badge ${isOwner ? "badge-success" : ""}">
+              ${isOwner ? "Owner" : "Member"}
+            </span>
+            ${!isOwner ? `
+              <button type="button" class="btn-secondary" onclick="leaveGroup(${g.id}, '${escapeHtml(g.name).replace(/'/g, "\'")}')" style="padding: 0.25rem 0.55rem; font-size: 0.72rem; color: #f87171; border-color: rgba(248, 113, 113, 0.3); cursor: pointer;" title="Leave this group">
+                Leave
+              </button>
+            ` : ""}
           </div>
         </div>
-        <span class="badge ${g.owner_id === state.currentUser?.id ? "badge-success" : ""}">
-          ${g.owner_id === state.currentUser?.id ? "Owner" : "Member"}
-        </span>
-      </div>
-    `
-    )
+      `;
+    })
     .join("");
 }
 
@@ -1230,12 +1320,19 @@ window.openGroupDetail = async function (groupId) {
   modalGroupName.textContent = group.name;
   modalGroupDesc.textContent = group.description || "No description provided.";
   modalMembersCount.textContent = `${group.member_count} member${group.member_count > 1 ? "s" : ""}`;
+  if (modalGroupInviteCode) {
+    modalGroupInviteCode.textContent = group.invite_code || "--------";
+  }
+
+  const isOwner = state.currentUser && group.owner_id === state.currentUser.id;
 
   // Show Add Member section only if current user is owner
-  if (state.currentUser && group.owner_id === state.currentUser.id) {
+  if (isOwner) {
     groupOwnerAddMemberSection.classList.remove("hidden");
+    if (modalLeaveGroupSection) modalLeaveGroupSection.classList.add("hidden");
   } else {
     groupOwnerAddMemberSection.classList.add("hidden");
+    if (modalLeaveGroupSection) modalLeaveGroupSection.classList.remove("hidden");
   }
 
   groupDetailModal.classList.remove("hidden");
@@ -1266,7 +1363,7 @@ function renderGroupMembers(members) {
 
   groupMembersList.innerHTML = members
     .map((m) => {
-      // Format Member's Availabilities
+      // Format Member Availabilities
       let availHtml = "";
       if (m.availabilities && m.availabilities.length > 0) {
         availHtml = `
@@ -1337,6 +1434,31 @@ window.removeMember = async function (userId) {
   }
 };
 
+// Leave group logic (Non-owner members)
+window.leaveGroup = async function (groupId, groupName) {
+  const name = groupName || "this group";
+  if (!confirm(`Are you sure you want to leave "${name}"?`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/groups/${groupId}/leave`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Failed to leave group.");
+
+    showToast(data.message || `Left "${name}" successfully.`, "info");
+    if (state.selectedGroup && state.selectedGroup.id === groupId) {
+      groupDetailModal.classList.add("hidden");
+      state.selectedGroup = null;
+    }
+    await loadUserGroups();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+};
+
 // Add member logic (Owner only)
 if (addMemberForm) {
   addMemberForm.addEventListener("submit", async (e) => {
@@ -1371,6 +1493,30 @@ if (addMemberForm) {
   });
 }
 
+// Copy Invite Code and Link
+if (btnCopyInviteCode) {
+  btnCopyInviteCode.addEventListener("click", () => {
+    if (!state.selectedGroup || !state.selectedGroup.invite_code) return;
+    copyToClipboard(state.selectedGroup.invite_code, "Invite code copied to clipboard!");
+  });
+}
+
+if (btnCopyInviteLink) {
+  btnCopyInviteLink.addEventListener("click", () => {
+    if (!state.selectedGroup || !state.selectedGroup.invite_code) return;
+    const inviteUrl = `${window.location.origin}/?join=${encodeURIComponent(state.selectedGroup.invite_code)}`;
+    copyToClipboard(inviteUrl, "Invite link copied to clipboard!");
+  });
+}
+
+// Leave group button inside modal
+if (btnLeaveGroup) {
+  btnLeaveGroup.addEventListener("click", async () => {
+    if (!state.selectedGroup) return;
+    await leaveGroup(state.selectedGroup.id, state.selectedGroup.name);
+  });
+}
+
 // Close Modal
 if (btnCloseGroupModal) {
   btnCloseGroupModal.addEventListener("click", () => {
@@ -1383,6 +1529,7 @@ if (btnRefreshGroups) {
   btnRefreshGroups.addEventListener("click", loadUserGroups);
 }
 
+// Create Group Form
 if (createGroupForm) {
   createGroupForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1411,7 +1558,7 @@ if (createGroupForm) {
         throw new Error(data.detail || "Failed to create group.");
       }
 
-      showToast(`Group "${data.name}" created successfully!`, "success", 5000);
+      showToast(`Group "${data.name}" created successfully! Invite code: ${data.invite_code}`, "success", 6000);
       createGroupForm.reset();
       await loadUserGroups();
       switchDashboardTab("panel-groups");
@@ -1419,6 +1566,45 @@ if (createGroupForm) {
       showToast(err.message, "error");
     } finally {
       setButtonLoading(btnCreateGroup, false);
+    }
+  });
+}
+
+// Join Group Form
+if (joinGroupForm) {
+  joinGroupForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const code = joinInviteCodeInput ? joinInviteCodeInput.value.trim().toUpperCase() : "";
+    if (!code) {
+      showToast("Please enter an invite code.", "error");
+      if (joinInviteCodeInput) joinInviteCodeInput.focus();
+      return;
+    }
+
+    setButtonLoading(btnJoinGroup, true);
+    try {
+      const response = await fetch("/api/groups/join", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${state.token}`,
+        },
+        body: JSON.stringify({ invite_code: code }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to join group.");
+      }
+
+      showToast(`Successfully joined group "${data.name}"!`, "success", 5000);
+      joinGroupForm.reset();
+      await loadUserGroups();
+      switchDashboardTab("panel-groups");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setButtonLoading(btnJoinGroup, false);
     }
   });
 }

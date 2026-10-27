@@ -1,3 +1,4 @@
+import secrets
 import shutil
 import uuid
 from contextlib import asynccontextmanager
@@ -17,6 +18,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.auth import (
@@ -31,13 +33,14 @@ from backend.auth import (
     verify_password,
     verify_password_reset_token,
 )
-from backend.database import Base, engine, get_db
-from backend.models import User, Availability, Group, GroupMember
+from backend.database import Base, engine, get_db, initialize_database
+from backend.models import User, Availability, Group, GroupMember, generate_invite_code
 from backend.schemas import (
     AvailabilityCreate,
     AvailabilityResponse,
     ForgotPasswordRequest,
     GroupCreate,
+    GroupJoinRequest,
     GroupMemberResponse,
     GroupResponse,
     MemberAddRequest,
@@ -58,7 +61,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    initialize_database(engine)
     yield
 
 
@@ -206,6 +209,15 @@ def login(login_in: UserLogin, db: Session = Depends(get_db)):
     )
 
 
+def generate_unique_group_code(db: Session) -> str:
+    """Generate a unique invite code for a new group."""
+    for _ in range(10):
+        code = generate_invite_code()
+        if not db.query(Group).filter(Group.invite_code == code).first():
+            return code
+    return generate_invite_code() + secrets.token_hex(2).upper()
+
+
 # --- Group Endpoints ---
 @app.post(
     "/api/groups",
@@ -218,10 +230,12 @@ def create_group(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    code = generate_unique_group_code(db)
     new_group = Group(
         name=group_in.name,
         description=group_in.description,
         owner_id=current_user.id,
+        invite_code=code,
     )
     db.add(new_group)
     db.commit()
@@ -240,6 +254,7 @@ def create_group(
         name=new_group.name,
         description=new_group.description,
         owner_id=new_group.owner_id,
+        invite_code=new_group.invite_code,
         member_count=1,
         created_at=new_group.created_at,
     )
@@ -271,11 +286,108 @@ def get_user_groups(
                 name=g.name,
                 description=g.description,
                 owner_id=g.owner_id,
+                invite_code=g.invite_code,
                 member_count=count,
                 created_at=g.created_at,
             )
         )
     return response
+
+
+@app.post(
+    "/api/groups/join",
+    response_model=GroupResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Join an existing group using an invite code",
+)
+def join_group(
+    req: GroupJoinRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    code = req.invite_code.strip().upper()
+    group = db.query(Group).filter(func.upper(Group.invite_code) == code).first()
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid invite code. Group not found.",
+        )
+
+    # Check if user is already a member
+    existing_mem = (
+        db.query(GroupMember)
+        .filter(GroupMember.group_id == group.id, GroupMember.user_id == current_user.id)
+        .first()
+    )
+    if existing_mem:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You are already a member of this group.",
+        )
+
+    membership = GroupMember(
+        group_id=group.id,
+        user_id=current_user.id,
+        role="member",
+    )
+    db.add(membership)
+    db.commit()
+
+    count = db.query(GroupMember).filter(GroupMember.group_id == group.id).count()
+
+    return GroupResponse(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        owner_id=group.owner_id,
+        invite_code=group.invite_code,
+        member_count=count,
+        created_at=group.created_at,
+    )
+
+
+@app.post(
+    "/api/groups/{group_id}/leave",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Leave a group that you are a member of",
+)
+@app.delete(
+    "/api/groups/{group_id}/leave",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Leave a group that you are a member of",
+)
+def leave_group(
+    group_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+
+    if group.owner_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Group owners cannot leave the group. Delete or transfer the group instead.",
+        )
+
+    membership = (
+        db.query(GroupMember)
+        .filter(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id)
+        .first()
+    )
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You are not a member of this group.",
+        )
+
+    db.delete(membership)
+    db.commit()
+
+    return MessageResponse(message=f"You have left '{group.name}'.")
 
 
 @app.get(

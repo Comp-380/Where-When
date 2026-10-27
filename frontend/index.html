@@ -352,7 +352,7 @@
 
         <div class="panel-footer">
           <span>Already registered?</span>
-          <button type="button" class="link-btn" id="link-to-login">Sign in here</button>
+          <button type="button" class="link-btn" id=\"link-to-login">Sign in here</button>
         </div>
       </section>
 
@@ -663,34 +663,60 @@
 
       <!-- 3. GROUPS PANEL -->
       <div id="panel-groups" class="dash-panel">
-        <!-- Create Group Card -->
-        <div class="calendar-section" style="margin-bottom: 1.5rem;">
-          <div class="calendar-header" style="margin-bottom: 0.75rem;">
-            <div>
-              <h3>Create a Group</h3>
-              <p>Start a new group circle for events, coordination, and availability</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+          <!-- Create Group Card -->
+          <div class="calendar-section" style="margin-bottom: 0;">
+            <div class="calendar-header" style="margin-bottom: 0.75rem;">
+              <div>
+                <h3>Create a Group</h3>
+                <p>Start a new circle for events, coordination, and availability</p>
+              </div>
             </div>
+            <form id="create-group-form" style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="group-name">Group Name <span class="req">*</span></label>
+                <div class="input-wrapper">
+                  <input type="text" id="group-name" placeholder="e.g. Weekend Roadtrip, Project Alpha" required minlength="2" maxlength="100" />
+                </div>
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="group-desc">Description (Optional)</label>
+                <div class="input-wrapper">
+                  <input type="text" id="group-desc" placeholder="e.g. Planning cabin logistics and meetup dates" maxlength="255" />
+                </div>
+              </div>
+              <div style="display: flex; justify-content: flex-end; margin-top: 0.25rem;">
+                <button type="submit" id="btn-create-group" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem; font-size: 0.85rem;">
+                  <span class="btn-text">+ Create Group</span>
+                  <div class="spinner hidden"></div>
+                </button>
+              </div>
+            </form>
           </div>
-          <form id="create-group-form" style="display: flex; flex-direction: column; gap: 0.75rem;">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label for="group-name">Group Name <span class="req">*</span></label>
-              <div class="input-wrapper">
-                <input type="text" id="group-name" placeholder="e.g. Weekend Roadtrip, Project Alpha" required minlength="2" maxlength="100" />
+
+          <!-- Join Group Card -->
+          <div class="calendar-section" style="margin-bottom: 0;">
+            <div class="calendar-header" style="margin-bottom: 0.75rem;">
+              <div>
+                <h3>Join with Invite Code</h3>
+                <p>Enter an invite code or click an invite link to join an existing group</p>
               </div>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label for="group-desc">Description (Optional)</label>
-              <div class="input-wrapper">
-                <input type="text" id="group-desc" placeholder="e.g. Planning cabin logistics and meetup dates" maxlength="255" />
+            <form id="join-group-form" style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="join-invite-code">Invite Code <span class="req">*</span></label>
+                <div class="input-wrapper">
+                  <input type="text" id="join-invite-code" placeholder="e.g. 3F8E19B2" required minlength="6" maxlength="32" style="font-family: monospace; letter-spacing: 1px; font-weight: 600; text-transform: uppercase;" />
+                </div>
               </div>
-            </div>
-            <div style="display: flex; justify-content: flex-end; margin-top: 0.25rem;">
-              <button type="submit" id="btn-create-group" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem; font-size: 0.85rem;">
-                <span class="btn-text">+ Create Group</span>
-                <div class="spinner hidden"></div>
-              </button>
-            </div>
-          </form>
+              <div style="display: flex; justify-content: flex-end; margin-top: auto; padding-top: 0.25rem;">
+                <button type="submit" id="btn-join-group" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem; font-size: 0.85rem;">
+                  <span class="btn-text">Join Group</span>
+                  <div class="spinner hidden"></div>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
 
         <!-- Groups Display List -->
@@ -722,6 +748,22 @@
           <button type="button" id="btn-close-group-modal" class="btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 1rem; cursor: pointer;">&times;</button>
         </div>
 
+        <!-- Invite Code Share Box -->
+        <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-input); padding: 0.6rem 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">Invite Code:</span>
+            <code id="modal-group-invite-code" style="font-size: 0.95rem; font-weight: 700; color: var(--accent); letter-spacing: 1px; font-family: monospace;">--------</code>
+          </div>
+          <div style="display: flex; gap: 0.4rem;">
+            <button type="button" id="btn-copy-invite-code" class="btn-secondary" style="padding: 0.3rem 0.65rem; font-size: 0.75rem; cursor: pointer;" title="Copy invite code to clipboard">
+              Copy Code
+            </button>
+            <button type="button" id="btn-copy-invite-link" class="btn-secondary" style="padding: 0.3rem 0.65rem; font-size: 0.75rem; cursor: pointer;" title="Copy direct join link">
+              Copy Invite Link
+            </button>
+          </div>
+        </div>
+
         <!-- Add Member Bar (visible only to Group Owner) -->
         <div id="group-owner-add-member-section" class="hidden" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
           <label style="font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 0.4rem; color: var(--accent);">
@@ -748,6 +790,14 @@
         <div id="group-members-list" style="overflow-y: auto; flex: 1; padding-right: 4px;">
           <p class="cal-empty-slots">Loading group members...</p>
         </div>
+
+        <!-- Leave Group Section (for non-owner members) -->
+        <div id="modal-leave-group-section" class="hidden" style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.78rem; color: var(--text-muted);">No longer part of this circle?</span>
+          <button type="button" id="btn-leave-group" class="btn-secondary" style="color: #f87171; border-color: rgba(248, 113, 113, 0.4); font-size: 0.8rem; padding: 0.4rem 0.9rem; cursor: pointer;">
+            Leave Group
+          </button>
+        </div>
       </div>
     </div>
 
@@ -769,6 +819,6 @@
     </footer>
   </div>
 
-  <script src="/static/js/app.js?v=20261021-group-members-avail"></script>
+  <script src="/static/js/app.js?v=20261027-invite-and-leave"></script>
 </body>
 </html>

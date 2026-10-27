@@ -146,6 +146,18 @@ class GroupCreate(BaseModel):
         return clean
 
 
+class GroupJoinRequest(BaseModel):
+    invite_code: str = Field(..., min_length=4, max_length=64, description="Group invite code")
+
+    @field_validator("invite_code")
+    @classmethod
+    def validate_invite_code(cls, v: str) -> str:
+        clean = v.strip().upper()
+        if len(clean) < 4:
+            raise ValueError("Invite code must be at least 4 characters.")
+        return clean
+
+
 class MemberAddRequest(BaseModel):
     identifier: str = Field(..., description="Username or email of user to add")
 
@@ -166,6 +178,7 @@ class GroupResponse(BaseModel):
     name: str
     description: Optional[str] = None
     owner_id: int
+    invite_code: str
     member_count: int = 1
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
