@@ -122,8 +122,15 @@ const joinGroupForm = document.getElementById("join-group-form");
 const joinInviteCodeInput = document.getElementById("join-invite-code");
 const btnJoinGroup = document.getElementById("btn-join-group");
 
-// Group Details Modal Elements
-const groupDetailModal = document.getElementById("group-detail-modal");
+// Group Availability & Management Elements (in Availability Tab)
+const groupAvailabilitySection = document.getElementById("group-availability-section");
+const availGroupSelect = document.getElementById("avail-group-select");
+const groupAvailContent = document.getElementById("group-avail-content");
+const groupAvailEmptyState = document.getElementById("group-avail-empty-state");
+const groupAvailNoSelection = document.getElementById("group-avail-no-selection");
+const groupAvailRoleBadge = document.getElementById("group-avail-role-badge");
+const btnAvailGoToGroups = document.getElementById("btn-avail-go-to-groups");
+
 const modalGroupName = document.getElementById("modal-group-name");
 const modalGroupDesc = document.getElementById("modal-group-desc");
 const modalGroupInviteCode = document.getElementById("modal-group-invite-code");
@@ -131,7 +138,6 @@ const btnCopyInviteCode = document.getElementById("btn-copy-invite-code");
 const btnCopyInviteLink = document.getElementById("btn-copy-invite-link");
 const modalMembersCount = document.getElementById("modal-members-count");
 const groupMembersList = document.getElementById("group-members-list");
-const btnCloseGroupModal = document.getElementById("btn-close-group-modal");
 const groupOwnerAddMemberSection = document.getElementById("group-owner-add-member-section");
 const addMemberForm = document.getElementById("add-member-form");
 const addMemberIdentifier = document.getElementById("add-member-identifier");
@@ -139,7 +145,7 @@ const btnAddMember = document.getElementById("btn-add-member");
 const modalLeaveGroupSection = document.getElementById("modal-leave-group-section");
 const btnLeaveGroup = document.getElementById("btn-leave-group");
 
-// Group Modal Tabs & Panels
+// Group Tabs & Panels
 const modalTabShared = document.getElementById("modal-tab-shared");
 const modalTabMembers = document.getElementById("modal-tab-members");
 const modalSharedCountBadge = document.getElementById("modal-shared-count-badge");
@@ -148,6 +154,9 @@ const groupPanelMembers = document.getElementById("group-panel-members");
 const groupMemberFilterChips = document.getElementById("group-member-filter-chips");
 const btnSelectAllMembers = document.getElementById("btn-select-all-members");
 const groupSharedSlotsContainer = document.getElementById("group-shared-slots-container");
+
+const groupDetailModal = document.getElementById("group-detail-modal");
+const btnCloseGroupModal = document.getElementById("btn-close-group-modal");
 
 
 // Edit Profile Elements
@@ -221,6 +230,7 @@ function switchDashboardTab(targetPanelId) {
 
   if (targetPanelId === "panel-availability") {
     renderCalendar();
+    updateAvailGroupSection();
   }
 }
 
@@ -1086,6 +1096,9 @@ window.deleteSlot = async function (slotId) {
     if (!res.ok) throw new Error("Could not delete slot");
     showToast("Availability slot removed", "info");
     await loadAvailabilities();
+    if (state.selectedGroup) {
+      await loadGroupAvailability(state.selectedGroup.id);
+    }
   } catch (err) {
     showToast(err.message, "error");
   }
@@ -1123,6 +1136,9 @@ if (availabilityForm) {
       if (!res.ok) throw new Error(data.detail || "Failed to add slot");
       showToast("Slot added!", "success");
       await loadAvailabilities();
+      if (state.selectedGroup) {
+        await loadGroupAvailability(state.selectedGroup.id);
+      }
     } catch (err) {
       showToast(err.message, "error");
     }
@@ -1278,6 +1294,7 @@ async function loadUserGroups() {
       dashGroupsBadge.textContent = groups.length;
     }
     renderUserGroups();
+    updateAvailGroupSection();
   } catch (e) {
     if (groupsListContainer) {
       groupsListContainer.innerHTML = `<p class="cal-empty-slots" style="color: #f87171;">Failed to load groups.</p>`;
@@ -1304,13 +1321,16 @@ function renderUserGroups() {
             </div>
             ${g.description ? `<p style="color: var(--text-secondary); font-size: 0.78rem; margin: 3px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(g.description)}</p>` : ""}
             <div style="color: var(--text-muted); font-size: 0.72rem; margin-top: 5px;">
-              ${g.member_count} member${g.member_count > 1 ? "s" : ""} • Click to inspect members & schedule
+              ${g.member_count} member${g.member_count > 1 ? "s" : ""} • Click to view group availability
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 0.5rem;" onclick="event.stopPropagation()">
             <span class="badge ${isOwner ? "badge-success" : ""}">
               ${isOwner ? "Owner" : "Member"}
             </span>
+            <button type="button" class="btn-primary" onclick="openGroupDetail(${g.id})" style="padding: 0.3rem 0.65rem; font-size: 0.74rem; width: auto; cursor: pointer;">
+              Availability &rarr;
+            </button>
             ${!isOwner ? `
               <button type="button" class="btn-secondary" onclick="leaveGroup(${g.id}, '${escapeHtml(g.name).replace(/'/g, "\'")}')" style="padding: 0.25rem 0.55rem; font-size: 0.72rem; color: #f87171; border-color: rgba(248, 113, 113, 0.3); cursor: pointer;" title="Leave this group">
                 Leave
@@ -1474,13 +1494,47 @@ if (btnSelectAllMembers) {
   });
 }
 
-window.openGroupDetail = async function (groupId) {
+function updateAvailGroupSection() {
+  if (!availGroupSelect) return;
+  if (!state.userGroups || state.userGroups.length === 0) {
+    if (groupAvailEmptyState) groupAvailEmptyState.classList.remove("hidden");
+    if (groupAvailNoSelection) groupAvailNoSelection.classList.add("hidden");
+    if (groupAvailContent) groupAvailContent.classList.add("hidden");
+    availGroupSelect.innerHTML = `<option value="">No groups joined</option>`;
+    availGroupSelect.disabled = true;
+    return;
+  }
+
+  availGroupSelect.disabled = false;
+  const currentVal = state.selectedGroup ? state.selectedGroup.id : null;
+
+  availGroupSelect.innerHTML = state.userGroups
+    .map((g) => `<option value="${g.id}">${escapeHtml(g.name)} (${g.member_count} member${g.member_count > 1 ? "s" : ""})</option>`)
+    .join("");
+
+  if (currentVal && state.userGroups.some((g) => g.id === currentVal)) {
+    availGroupSelect.value = String(currentVal);
+    selectGroupInAvailability(currentVal, false);
+  } else {
+    const firstGroup = state.userGroups[0];
+    availGroupSelect.value = String(firstGroup.id);
+    selectGroupInAvailability(firstGroup.id, false);
+  }
+}
+
+function selectGroupInAvailability(groupId, shouldScroll = false) {
   const group = state.userGroups.find((g) => g.id === groupId);
   if (!group) return;
 
   state.selectedGroup = group;
-  modalGroupName.textContent = group.name;
-  modalGroupDesc.textContent = group.description || "No description provided.";
+  if (availGroupSelect) availGroupSelect.value = String(groupId);
+
+  if (groupAvailEmptyState) groupAvailEmptyState.classList.add("hidden");
+  if (groupAvailNoSelection) groupAvailNoSelection.classList.add("hidden");
+  if (groupAvailContent) groupAvailContent.classList.remove("hidden");
+
+  if (modalGroupName) modalGroupName.textContent = group.name;
+  if (modalGroupDesc) modalGroupDesc.textContent = group.description || "No description provided.";
   if (modalMembersCount) {
     modalMembersCount.textContent = `${group.member_count} member${group.member_count > 1 ? "s" : ""}`;
   }
@@ -1489,25 +1543,62 @@ window.openGroupDetail = async function (groupId) {
   }
 
   const isOwner = state.currentUser && group.owner_id === state.currentUser.id;
+  if (groupAvailRoleBadge) {
+    groupAvailRoleBadge.textContent = isOwner ? "Owner" : "Member";
+    if (isOwner) {
+      groupAvailRoleBadge.className = "badge badge-success";
+    } else {
+      groupAvailRoleBadge.className = "badge";
+    }
+  }
 
   // Show Add Member section only if current user is owner
   if (isOwner) {
-    groupOwnerAddMemberSection.classList.remove("hidden");
+    if (groupOwnerAddMemberSection) groupOwnerAddMemberSection.classList.remove("hidden");
     if (modalLeaveGroupSection) modalLeaveGroupSection.classList.add("hidden");
   } else {
-    groupOwnerAddMemberSection.classList.add("hidden");
+    if (groupOwnerAddMemberSection) groupOwnerAddMemberSection.classList.add("hidden");
     if (modalLeaveGroupSection) modalLeaveGroupSection.classList.remove("hidden");
   }
 
-  if (modalTabShared && modalTabMembers) {
-    modalTabShared.classList.add("active");
-    modalTabMembers.classList.remove("active");
-    groupPanelShared.classList.remove("hidden");
-    groupPanelMembers.classList.add("hidden");
+  if (modalTabShared && modalTabMembers && groupPanelShared && groupPanelMembers) {
+    if (groupPanelShared.classList.contains("hidden") && groupPanelMembers.classList.contains("hidden")) {
+      modalTabShared.classList.add("active");
+      modalTabMembers.classList.remove("active");
+      groupPanelShared.classList.remove("hidden");
+      groupPanelMembers.classList.add("hidden");
+    }
   }
 
-  groupDetailModal.classList.remove("hidden");
-  await loadGroupAvailability(groupId);
+  loadGroupAvailability(groupId);
+
+  if (shouldScroll && groupAvailabilitySection) {
+    groupAvailabilitySection.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+if (availGroupSelect) {
+  availGroupSelect.addEventListener("change", (e) => {
+    const groupId = parseInt(e.target.value, 10);
+    if (groupId) {
+      selectGroupInAvailability(groupId, false);
+    } else {
+      state.selectedGroup = null;
+      if (groupAvailContent) groupAvailContent.classList.add("hidden");
+      if (groupAvailNoSelection) groupAvailNoSelection.classList.remove("hidden");
+    }
+  });
+}
+
+if (btnAvailGoToGroups) {
+  btnAvailGoToGroups.addEventListener("click", () => {
+    switchDashboardTab("panel-groups");
+  });
+}
+
+window.openGroupDetail = async function (groupId) {
+  switchDashboardTab("panel-availability");
+  selectGroupInAvailability(groupId, true);
 };
 
 async function loadGroupAvailability(groupId) {
@@ -1835,7 +1926,7 @@ window.leaveGroup = async function (groupId, groupName) {
 
     showToast(data.message || `Left "${name}" successfully.`, "info");
     if (state.selectedGroup && state.selectedGroup.id === groupId) {
-      groupDetailModal.classList.add("hidden");
+      if (groupDetailModal) groupDetailModal.classList.add("hidden");
       state.selectedGroup = null;
     }
     await loadUserGroups();
@@ -1902,10 +1993,10 @@ if (btnLeaveGroup) {
   });
 }
 
-// Close Modal
+// Close Modal (legacy support)
 if (btnCloseGroupModal) {
   btnCloseGroupModal.addEventListener("click", () => {
-    groupDetailModal.classList.add("hidden");
+    if (groupDetailModal) groupDetailModal.classList.add("hidden");
     state.selectedGroup = null;
   });
 }
