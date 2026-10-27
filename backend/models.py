@@ -1,7 +1,13 @@
 from datetime import datetime, timezone
+import secrets
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Date, Time, UniqueConstraint
 from sqlalchemy.orm import relationship
 from backend.database import Base
+
+
+def generate_invite_code() -> str:
+    """Generate an 8-character uppercase hexadecimal invite code."""
+    return secrets.token_hex(4).upper()
 
 
 class GroupMember(Base):
@@ -74,6 +80,7 @@ class Group(Base):
     name = Column(String(100), nullable=False)
     description = Column(String(255), nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    invite_code = Column(String(32), unique=True, index=True, nullable=False, default=generate_invite_code)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
