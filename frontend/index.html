@@ -111,6 +111,120 @@
       padding: 0.2rem 0.5rem;
       border-radius: 4px;
     }
+    .group-modal-nav {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 0.85rem;
+      padding-bottom: 0.25rem;
+    }
+    .group-sub-tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 0.86rem;
+      font-weight: 600;
+      padding: 0.45rem 0.85rem;
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
+    }
+    .group-sub-tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .group-sub-tab-btn.active {
+      color: #fff;
+      background: var(--primary);
+    }
+    .member-filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 0.75rem;
+      padding: 0.5rem 0.65rem;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      align-items: center;
+    }
+    .member-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.55rem;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+      font-size: 0.76rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .member-chip.selected {
+      background: rgba(99, 102, 241, 0.25);
+      border-color: var(--primary);
+      color: var(--text-main);
+      font-weight: 600;
+    }
+    .shared-slot-card {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-left: 4px solid #10b981;
+      border-radius: var(--radius-sm);
+      padding: 0.85rem 1rem;
+      margin-bottom: 0.75rem;
+      transition: transform 0.15s ease;
+    }
+    .shared-slot-card:hover {
+      transform: translateX(2px);
+    }
+    .shared-slot-card.partial {
+      border-left-color: #f59e0b;
+    }
+    .shared-slot-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.35rem;
+    }
+    .shared-time-text {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .shared-date-pill {
+      font-size: 0.76rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .badge-everyone {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+    }
+    .badge-partial {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+    }
+
   </style>
 </head>
 <body>
@@ -739,7 +853,7 @@
 
     <!-- Group Detail & Member Availability Modal -->
     <div id="group-detail-modal" class="modal-overlay hidden">
-      <div class="modal-card" style="max-width: 580px; text-align: left; max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-card" style="max-width: 660px; text-align: left; max-height: 88vh; display: flex; flex-direction: column;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
           <div>
             <h3 id="modal-group-name" style="margin-bottom: 0.25rem; font-size: 1.35rem;">Group Name</h3>
@@ -764,8 +878,18 @@
           </div>
         </div>
 
+        <!-- Sub-Navigation Tabs inside the Group Modal -->
+        <div class="group-modal-nav">
+          <button type="button" class="group-sub-tab-btn active" id="modal-tab-shared">
+            🤝 Shared Free Times <span id="modal-shared-count-badge" class="dash-tab-badge">0</span>
+          </button>
+          <button type="button" class="group-sub-tab-btn" id="modal-tab-members">
+            👤 Individual Schedules <span id="modal-members-count" class="dash-tab-badge">0</span>
+          </button>
+        </div>
+
         <!-- Add Member Bar (visible only to Group Owner) -->
-        <div id="group-owner-add-member-section" class="hidden" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+        <div id="group-owner-add-member-section" class="hidden" style="margin-bottom: 0.85rem; padding: 0.75rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
           <label style="font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 0.4rem; color: var(--accent);">
             + Add New Member (Owner Only)
           </label>
@@ -780,15 +904,34 @@
           </form>
         </div>
 
-        <!-- Members Header -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-          <h4 style="font-size: 0.95rem; margin: 0; color: var(--text-main);">Group Members & Availability</h4>
-          <span id="modal-members-count" class="badge">0 members</span>
+        <!-- PANEL 1: Shared Free Times -->
+        <div id="group-panel-shared" class="group-modal-panel" style="overflow-y: auto; flex: 1; padding-right: 4px;">
+          <!-- Member Selection / Filter Bar -->
+          <div style="margin-bottom: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+              <span style="font-size: 0.76rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">
+                Include Members in Overlap:
+              </span>
+              <span style="font-size: 0.74rem; color: var(--accent); cursor: pointer; text-decoration: underline;" id="btn-select-all-members">
+                Select All
+              </span>
+            </div>
+            <div id="group-member-filter-chips" class="member-filter-chips">
+              <!-- Dynamically populated member chips with checkboxes -->
+            </div>
+          </div>
+
+          <!-- Shared Slots List -->
+          <div id="group-shared-slots-container">
+            <p class="cal-empty-slots">Calculating shared availability...</p>
+          </div>
         </div>
 
-        <!-- Scrollable Members List -->
-        <div id="group-members-list" style="overflow-y: auto; flex: 1; padding-right: 4px;">
-          <p class="cal-empty-slots">Loading group members...</p>
+        <!-- PANEL 2: Individual Member Schedules -->
+        <div id="group-panel-members" class="group-modal-panel hidden" style="overflow-y: auto; flex: 1; padding-right: 4px;">
+          <div id="group-members-list">
+            <p class="cal-empty-slots">Loading members...</p>
+          </div>
         </div>
 
         <!-- Leave Group Section (for non-owner members) -->
@@ -819,6 +962,6 @@
     </footer>
   </div>
 
-  <script src="/static/js/app.js?v=20261027-invite-and-leave"></script>
+  <script src="/static/js/app.js?v=20261027-group-calendar"></script>
 </body>
 </html>

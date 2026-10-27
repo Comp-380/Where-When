@@ -139,6 +139,17 @@ const btnAddMember = document.getElementById("btn-add-member");
 const modalLeaveGroupSection = document.getElementById("modal-leave-group-section");
 const btnLeaveGroup = document.getElementById("btn-leave-group");
 
+// Group Modal Tabs & Panels
+const modalTabShared = document.getElementById("modal-tab-shared");
+const modalTabMembers = document.getElementById("modal-tab-members");
+const modalSharedCountBadge = document.getElementById("modal-shared-count-badge");
+const groupPanelShared = document.getElementById("group-panel-shared");
+const groupPanelMembers = document.getElementById("group-panel-members");
+const groupMemberFilterChips = document.getElementById("group-member-filter-chips");
+const btnSelectAllMembers = document.getElementById("btn-select-all-members");
+const groupSharedSlotsContainer = document.getElementById("group-shared-slots-container");
+
+
 // Edit Profile Elements
 const btnToggleEditProfile = document.getElementById("btn-toggle-edit-profile");
 const editProfileForm = document.getElementById("edit-profile-form");
@@ -1312,6 +1323,157 @@ function renderUserGroups() {
     .join("");
 }
 
+// ==================== TIME & DATE FORMATTING UTILITIES ====================
+function formatTime12h(timeStr) {
+  if (!timeStr) return "";
+  const parts = timeStr.split(":");
+  let hour = parseInt(parts[0], 10);
+  const minute = parts[1] || "00";
+  const ampm = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12 || 12;
+  return `${hour}:${minute} ${ampm}`;
+}
+
+function formatDatePretty(dateStr) {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dateObj = new Date(y, m - 1, d);
+  return dateObj.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function timeStrToMinutes(timeStr) {
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTimeStr(mins) {
+  const m = Math.max(0, Math.min(mins, 24 * 60 - 1));
+  const h = String(Math.floor(m / 60)).padStart(2, "0");
+  const min = String(m % 60).padStart(2, "0");
+  return `${h}:${min}:00`;
+}
+
+function mergeIntervalList(intervals) {
+  if (!intervals || intervals.length === 0) return [];
+  const sorted = [...intervals].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const merged = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = sorted[i];
+    if (curr[0] <= prev[1]) {
+      prev[1] = Math.max(prev[1], curr[1]);
+    } else {
+      merged.push(curr);
+    }
+  }
+  return merged;
+}
+
+function computeMutualIntervalsClient(userIntervalsMap, totalMembersCount) {
+  if (!userIntervalsMap || totalMembersCount <= 0) {
+    return { shared: [], partial: [] };
+  }
+
+  const normalized = {};
+  const boundariesSet = new Set();
+
+  for (const [userId, intervals] of Object.entries(userIntervalsMap)) {
+    const merged = mergeIntervalList(intervals);
+    normalized[userId] = merged;
+    for (const [start, end] of merged) {
+      boundariesSet.add(start);
+      boundariesSet.add(end);
+    }
+  }
+
+  if (boundariesSet.size === 0) return { shared: [], partial: [] };
+
+  const boundaries = Array.from(boundariesSet).sort((a, b) => a - b);
+  const rawSegments = [];
+
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const segStart = boundaries[i];
+    const segEnd = boundaries[i + 1];
+    if (segStart >= segEnd) continue;
+
+    const activeUsers = [];
+    for (const [username, intervals] of Object.entries(normalized)) {
+      for (const [uStart, uEnd] of intervals) {
+        if (uStart <= segStart && segEnd <= uEnd) {
+          activeUsers.push(username);
+          break;
+        }
+      }
+    }
+
+    if (activeUsers.length > 0) {
+      rawSegments.push({
+        start: segStart,
+        end: segEnd,
+        users: activeUsers.sort(),
+        count: activeUsers.length,
+      });
+    }
+  }
+
+  function collapseSegments(segs) {
+    if (!segs || segs.length === 0) return [];
+    const collapsed = [{ ...segs[0] }];
+    for (let i = 1; i < segs.length; i++) {
+      const prev = collapsed[collapsed.length - 1];
+      const curr = segs[i];
+      if (prev.end === curr.start && prev.users.join(",") === curr.users.join(",")) {
+        prev.end = curr.end;
+      } else {
+        collapsed.push({ ...curr });
+      }
+    }
+    return collapsed;
+  }
+
+  const everyoneSegments = collapseSegments(
+    rawSegments.filter((s) => s.count === totalMembersCount)
+  );
+
+  const minCount = totalMembersCount > 1 ? 2 : 1;
+  const partialSegments = collapseSegments(
+    rawSegments.filter((s) => s.count >= minCount && s.count < totalMembersCount)
+  );
+
+  return { shared: everyoneSegments, partial: partialSegments };
+}
+
+// Sub-Tab Navigation inside Group Modal
+if (modalTabShared && modalTabMembers) {
+  modalTabShared.addEventListener("click", () => {
+    modalTabShared.classList.add("active");
+    modalTabMembers.classList.remove("active");
+    groupPanelShared.classList.remove("hidden");
+    groupPanelMembers.classList.add("hidden");
+  });
+
+  modalTabMembers.addEventListener("click", () => {
+    modalTabMembers.classList.add("active");
+    modalTabShared.classList.remove("active");
+    groupPanelMembers.classList.remove("hidden");
+    groupPanelShared.classList.add("hidden");
+  });
+}
+
+if (btnSelectAllMembers) {
+  btnSelectAllMembers.addEventListener("click", () => {
+    if (!state.currentGroupData || !state.currentGroupData.members) return;
+    state.selectedMemberIds = new Set(state.currentGroupData.members.map((m) => m.user_id));
+    renderMemberFilterChips();
+    renderGroupSharedSlots();
+  });
+}
+
 window.openGroupDetail = async function (groupId) {
   const group = state.userGroups.find((g) => g.id === groupId);
   if (!group) return;
@@ -1319,7 +1481,9 @@ window.openGroupDetail = async function (groupId) {
   state.selectedGroup = group;
   modalGroupName.textContent = group.name;
   modalGroupDesc.textContent = group.description || "No description provided.";
-  modalMembersCount.textContent = `${group.member_count} member${group.member_count > 1 ? "s" : ""}`;
+  if (modalMembersCount) {
+    modalMembersCount.textContent = `${group.member_count} member${group.member_count > 1 ? "s" : ""}`;
+  }
   if (modalGroupInviteCode) {
     modalGroupInviteCode.textContent = group.invite_code || "--------";
   }
@@ -1335,25 +1499,244 @@ window.openGroupDetail = async function (groupId) {
     if (modalLeaveGroupSection) modalLeaveGroupSection.classList.remove("hidden");
   }
 
+  if (modalTabShared && modalTabMembers) {
+    modalTabShared.classList.add("active");
+    modalTabMembers.classList.remove("active");
+    groupPanelShared.classList.remove("hidden");
+    groupPanelMembers.classList.add("hidden");
+  }
+
   groupDetailModal.classList.remove("hidden");
-  await loadGroupMembers(groupId);
+  await loadGroupAvailability(groupId);
 };
 
-async function loadGroupMembers(groupId) {
-  groupMembersList.innerHTML = `<p class="cal-empty-slots">Loading members and availability...</p>`;
+async function loadGroupAvailability(groupId) {
+  groupSharedSlotsContainer.innerHTML = `<p class="cal-empty-slots">Loading group availability...</p>`;
+  groupMembersList.innerHTML = `<p class="cal-empty-slots">Loading member schedules...</p>`;
+
   try {
-    const res = await fetch(`/api/groups/${groupId}/members`, {
+    const res = await fetch(`/api/groups/${groupId}/availability`, {
       headers: { Authorization: `Bearer ${state.token}` },
     });
-    if (!res.ok) throw new Error("Failed to load group members.");
-    const members = await res.json();
-    renderGroupMembers(members);
+    if (!res.ok) throw new Error("Failed to load group availability.");
+    const data = await res.json();
+    state.currentGroupData = data;
+
+    state.selectedMemberIds = new Set(data.members.map((m) => m.user_id));
+
+    if (modalMembersCount) {
+      modalMembersCount.textContent = `${data.members.length} member${data.members.length > 1 ? "s" : ""}`;
+    }
+
+    renderMemberFilterChips();
+    renderGroupSharedSlots();
+    renderGroupIndividualMembers(data.members);
   } catch (err) {
+    groupSharedSlotsContainer.innerHTML = `<p class="cal-empty-slots" style="color: #f87171;">${err.message}</p>`;
     groupMembersList.innerHTML = `<p class="cal-empty-slots" style="color: #f87171;">${err.message}</p>`;
   }
 }
 
-function renderGroupMembers(members) {
+function renderMemberFilterChips() {
+  if (!groupMemberFilterChips || !state.currentGroupData) return;
+  const members = state.currentGroupData.members || [];
+
+  groupMemberFilterChips.innerHTML = members
+    .map((m) => {
+      const isSelected = state.selectedMemberIds.has(m.user_id);
+      const isMe = state.currentUser && state.currentUser.id === m.user_id;
+      const label = isMe ? "You" : (m.full_name || `@${m.username}`);
+      return `
+        <span class="member-chip ${isSelected ? "selected" : ""}" onclick="toggleGroupMemberFilter(${m.user_id})">
+          <input type="checkbox" ${isSelected ? "checked" : ""} style="pointer-events: none; accent-color: var(--primary);" />
+          <span>${escapeHtml(label)}</span>
+        </span>
+      `;
+    })
+    .join("");
+}
+
+window.toggleGroupMemberFilter = function (userId) {
+  if (!state.selectedMemberIds) return;
+  if (state.selectedMemberIds.has(userId)) {
+    if (state.selectedMemberIds.size <= 1) {
+      showToast("At least one member must remain selected.", "info");
+      return;
+    }
+    state.selectedMemberIds.delete(userId);
+  } else {
+    state.selectedMemberIds.add(userId);
+  }
+  renderMemberFilterChips();
+  renderGroupSharedSlots();
+};
+
+function renderGroupSharedSlots() {
+  if (!groupSharedSlotsContainer || !state.currentGroupData) return;
+
+  const allMembers = state.currentGroupData.members || [];
+  const selectedMembers = allMembers.filter((m) => state.selectedMemberIds.has(m.user_id));
+  const totalSelected = selectedMembers.length;
+
+  if (totalSelected === 0) {
+    groupSharedSlotsContainer.innerHTML = `<p class="cal-empty-slots">Please select at least one member to calculate shared times.</p>`;
+    if (modalSharedCountBadge) modalSharedCountBadge.textContent = "0";
+    return;
+  }
+
+  const datesMap = {};
+  selectedMembers.forEach((m) => {
+    (m.availabilities || []).forEach((slot) => {
+      if (!datesMap[slot.date]) datesMap[slot.date] = {};
+      if (!datesMap[slot.date][m.username]) datesMap[slot.date][m.username] = [];
+      datesMap[slot.date][m.username].push([
+        timeStrToMinutes(slot.start_time),
+        timeStrToMinutes(slot.end_time),
+      ]);
+    });
+  });
+
+  const sortedDates = Object.keys(datesMap).sort();
+  const allSharedList = [];
+  const allPartialList = [];
+
+  sortedDates.forEach((d) => {
+    const userIntervals = datesMap[d];
+    const { shared, partial } = computeMutualIntervalsClient(userIntervals, totalSelected);
+
+    shared.forEach((s) => {
+      allSharedList.push({
+        date: d,
+        start_time: minutesToTimeStr(s.start),
+        end_time: minutesToTimeStr(s.end),
+        users: s.users,
+        count: s.count,
+        total: totalSelected,
+        is_everyone: true,
+      });
+    });
+
+    partial.forEach((p) => {
+      allPartialList.push({
+        date: d,
+        start_time: minutesToTimeStr(p.start),
+        end_time: minutesToTimeStr(p.end),
+        users: p.users,
+        count: p.count,
+        total: totalSelected,
+        is_everyone: false,
+      });
+    });
+  });
+
+  if (modalSharedCountBadge) {
+    modalSharedCountBadge.textContent = String(allSharedList.length);
+  }
+
+  if (allSharedList.length === 0 && allPartialList.length === 0) {
+    groupSharedSlotsContainer.innerHTML = `
+      <div style="text-align: center; padding: 1.5rem 1rem;">
+        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">📅</div>
+        <p style="color: var(--text-main); font-weight: 600; margin-bottom: 0.35rem;">No overlapping free times found</p>
+        <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">
+          The selected ${totalSelected} member${totalSelected > 1 ? "s" : ""} have no overlapping hours. Try unchecking busy members or ask members to add more open slots.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  let html = "";
+
+  if (allSharedList.length > 0) {
+    html += `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+        <span style="font-size: 0.78rem; font-weight: 700; color: #34d399; text-transform: uppercase; letter-spacing: 0.04em;">
+          ✓ Times When All ${totalSelected} Selected Members Are Free (${allSharedList.length})
+        </span>
+      </div>
+    `;
+
+    html += allSharedList
+      .map((slot) => {
+        const startTime12 = formatTime12h(slot.start_time);
+        const endTime12 = formatTime12h(slot.end_time);
+        const dateFormatted = formatDatePretty(slot.date);
+        const userTags = slot.users
+          .map((u) => `<span class="avail-pill" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #34d399;">@${escapeHtml(u)}</span>`)
+          .join("");
+
+        return `
+          <div class="shared-slot-card">
+            <div class="shared-slot-header">
+              <span class="shared-date-pill">📅 ${escapeHtml(dateFormatted)}</span>
+              <span class="badge-everyone">All ${slot.total} Free</span>
+            </div>
+            <div style="margin: 0.45rem 0;">
+              <span class="shared-time-text">
+                ${startTime12} – ${endTime12}
+                <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400; margin-left: 0.4rem;">
+                  (${slot.start_time.slice(0, 5)} - ${slot.end_time.slice(0, 5)})
+                </span>
+              </span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.35rem;">
+              <span style="font-size: 0.72rem; color: var(--text-secondary);">Available:</span>
+              ${userTags}
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  if (allPartialList.length > 0 && totalSelected > 2) {
+    html += `
+      <div style="margin-top: 1.25rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.78rem; font-weight: 700; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.04em;">
+          Partial Overlaps (${allPartialList.length})
+        </span>
+      </div>
+    `;
+
+    html += allPartialList
+      .map((slot) => {
+        const startTime12 = formatTime12h(slot.start_time);
+        const endTime12 = formatTime12h(slot.end_time);
+        const dateFormatted = formatDatePretty(slot.date);
+        const userTags = slot.users
+          .map((u) => `<span class="avail-pill" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">@${escapeHtml(u)}</span>`)
+          .join("");
+
+        return `
+          <div class="shared-slot-card partial">
+            <div class="shared-slot-header">
+              <span class="shared-date-pill">📅 ${escapeHtml(dateFormatted)}</span>
+              <span class="badge-partial">${slot.count} of ${slot.total} Free</span>
+            </div>
+            <div style="margin: 0.45rem 0;">
+              <span class="shared-time-text">
+                ${startTime12} – ${endTime12}
+                <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400; margin-left: 0.4rem;">
+                  (${slot.start_time.slice(0, 5)} - ${slot.end_time.slice(0, 5)})
+                </span>
+              </span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.35rem;">
+              <span style="font-size: 0.72rem; color: var(--text-secondary);">Available:</span>
+              ${userTags}
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  groupSharedSlotsContainer.innerHTML = html;
+}
+
+function renderGroupIndividualMembers(members) {
+  if (!groupMembersList) return;
   if (!members || members.length === 0) {
     groupMembersList.innerHTML = `<p class="cal-empty-slots">No members found in this group.</p>`;
     return;
@@ -1369,13 +1752,16 @@ function renderGroupMembers(members) {
         availHtml = `
           <div class="member-avail-pills">
             ${m.availabilities
-              .map(
-                (a) => `
-              <span class="avail-pill">
-                <strong>${escapeHtml(a.date)}</strong>: ${a.start_time.slice(0, 5)} - ${a.end_time.slice(0, 5)} (${escapeHtml(a.title)})
-              </span>
-            `
-              )
+              .map((a) => {
+                const s12 = formatTime12h(a.start_time);
+                const e12 = formatTime12h(a.end_time);
+                const datePretty = formatDatePretty(a.date);
+                return `
+                  <span class="avail-pill" title="${escapeHtml(a.title || 'Available')}">
+                    <strong>${escapeHtml(datePretty)}</strong>: ${s12} – ${e12} <span style="opacity: 0.7;">(${escapeHtml(a.title || 'Available')})</span>
+                  </span>
+                `;
+              })
               .join("")}
           </div>
         `;
@@ -1383,7 +1769,6 @@ function renderGroupMembers(members) {
         availHtml = `<div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px; font-style: italic;">No availability registered yet.</div>`;
       }
 
-      // Remove button for Owner (except on the owner themselves)
       const canRemove = isOwner && m.user_id !== state.selectedGroup.owner_id;
       const removeBtn = canRemove
         ? `<button type="button" class="btn-del-slot" onclick="removeMember(${m.user_id})" title="Remove member" style="color: #f87171; font-size: 1.1rem; cursor: pointer;">&times;</button>`
@@ -1427,7 +1812,7 @@ window.removeMember = async function (userId) {
     if (!res.ok) throw new Error(data.detail || "Failed to remove member.");
 
     showToast(data.message || "Member removed.", "info");
-    await loadGroupMembers(state.selectedGroup.id);
+    await loadGroupAvailability(state.selectedGroup.id);
     await loadUserGroups();
   } catch (err) {
     showToast(err.message, "error");
@@ -1483,7 +1868,7 @@ if (addMemberForm) {
 
       showToast(data.message || "Member added!", "success");
       addMemberForm.reset();
-      await loadGroupMembers(state.selectedGroup.id);
+      await loadGroupAvailability(state.selectedGroup.id);
       await loadUserGroups();
     } catch (err) {
       showToast(err.message, "error");

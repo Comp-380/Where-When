@@ -182,3 +182,24 @@ class GroupResponse(BaseModel):
     member_count: int = 1
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+class CommonAvailabilitySlot(BaseModel):
+    date: DateType
+    start_time: TimeType
+    end_time: TimeType
+    available_member_count: int
+    total_member_count: int
+    is_everyone: bool
+    available_users: List[str]
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GroupAvailabilityResponse(BaseModel):
+    group_id: int
+    group_name: str
+    total_members: int
+    members: List[GroupMemberResponse]
+    shared_slots: List[CommonAvailabilitySlot]
+    partial_slots: List[CommonAvailabilitySlot] = []
+    model_config = ConfigDict(from_attributes=True)
