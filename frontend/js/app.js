@@ -122,41 +122,47 @@ const joinGroupForm = document.getElementById("join-group-form");
 const joinInviteCodeInput = document.getElementById("join-invite-code");
 const btnJoinGroup = document.getElementById("btn-join-group");
 
-// Group Availability & Management Elements (in Availability Tab)
+// Group Availability Elements (in Availability Tab)
 const groupAvailabilitySection = document.getElementById("group-availability-section");
 const availGroupSelect = document.getElementById("avail-group-select");
 const groupAvailContent = document.getElementById("group-avail-content");
 const groupAvailEmptyState = document.getElementById("group-avail-empty-state");
 const groupAvailNoSelection = document.getElementById("group-avail-no-selection");
-const groupAvailRoleBadge = document.getElementById("group-avail-role-badge");
+const availGroupName = document.getElementById("avail-group-name");
+const availGroupDesc = document.getElementById("avail-group-desc");
+const availGroupRoleBadge = document.getElementById("avail-group-role-badge");
 const btnAvailGoToGroups = document.getElementById("btn-avail-go-to-groups");
+const btnAvailManageGroup = document.getElementById("btn-avail-manage-group");
 
+const availTabShared = document.getElementById("avail-tab-shared");
+const availTabMembers = document.getElementById("avail-tab-members");
+const availSharedCountBadge = document.getElementById("avail-shared-count-badge");
+const availMembersCount = document.getElementById("avail-members-count");
+const availPanelShared = document.getElementById("avail-panel-shared");
+const availPanelMembers = document.getElementById("avail-panel-members");
+const availMemberFilterChips = document.getElementById("avail-member-filter-chips");
+const availBtnSelectAllMembers = document.getElementById("avail-btn-select-all-members");
+const availSharedSlotsContainer = document.getElementById("avail-shared-slots-container");
+const availMembersList = document.getElementById("avail-members-list");
+
+// Group Details & Management Modal Elements (in Groups Tab)
+const groupDetailModal = document.getElementById("group-detail-modal");
+const btnCloseGroupModal = document.getElementById("btn-close-group-modal");
 const modalGroupName = document.getElementById("modal-group-name");
 const modalGroupDesc = document.getElementById("modal-group-desc");
+const modalGroupRoleBadge = document.getElementById("modal-group-role-badge");
 const modalGroupInviteCode = document.getElementById("modal-group-invite-code");
 const btnCopyInviteCode = document.getElementById("btn-copy-invite-code");
 const btnCopyInviteLink = document.getElementById("btn-copy-invite-link");
+const btnModalViewAvail = document.getElementById("btn-modal-view-avail");
 const modalMembersCount = document.getElementById("modal-members-count");
-const groupMembersList = document.getElementById("group-members-list");
+const groupManageMembersList = document.getElementById("group-manage-members-list");
 const groupOwnerAddMemberSection = document.getElementById("group-owner-add-member-section");
 const addMemberForm = document.getElementById("add-member-form");
 const addMemberIdentifier = document.getElementById("add-member-identifier");
 const btnAddMember = document.getElementById("btn-add-member");
 const modalLeaveGroupSection = document.getElementById("modal-leave-group-section");
 const btnLeaveGroup = document.getElementById("btn-leave-group");
-
-// Group Tabs & Panels
-const modalTabShared = document.getElementById("modal-tab-shared");
-const modalTabMembers = document.getElementById("modal-tab-members");
-const modalSharedCountBadge = document.getElementById("modal-shared-count-badge");
-const groupPanelShared = document.getElementById("group-panel-shared");
-const groupPanelMembers = document.getElementById("group-panel-members");
-const groupMemberFilterChips = document.getElementById("group-member-filter-chips");
-const btnSelectAllMembers = document.getElementById("btn-select-all-members");
-const groupSharedSlotsContainer = document.getElementById("group-shared-slots-container");
-
-const groupDetailModal = document.getElementById("group-detail-modal");
-const btnCloseGroupModal = document.getElementById("btn-close-group-modal");
 
 
 // Edit Profile Elements
@@ -1328,7 +1334,10 @@ function renderUserGroups() {
             <span class="badge ${isOwner ? "badge-success" : ""}">
               ${isOwner ? "Owner" : "Member"}
             </span>
-            <button type="button" class="btn-primary" onclick="openGroupDetail(${g.id})" style="padding: 0.3rem 0.65rem; font-size: 0.74rem; width: auto; cursor: pointer;">
+            <button type="button" class="btn-secondary" onclick="openGroupDetail(${g.id})" style="padding: 0.3rem 0.65rem; font-size: 0.74rem; width: auto; cursor: pointer;" title="Manage members and invite code">
+              ⚙ Manage
+            </button>
+            <button type="button" class="btn-primary" onclick="openGroupAvailability(${g.id})" style="padding: 0.3rem 0.65rem; font-size: 0.74rem; width: auto; cursor: pointer;" title="View group availability on calendar">
               Availability &rarr;
             </button>
             ${!isOwner ? `
@@ -1468,29 +1477,37 @@ function computeMutualIntervalsClient(userIntervalsMap, totalMembersCount) {
   return { shared: everyoneSegments, partial: partialSegments };
 }
 
-// Sub-Tab Navigation inside Group Modal
-if (modalTabShared && modalTabMembers) {
-  modalTabShared.addEventListener("click", () => {
-    modalTabShared.classList.add("active");
-    modalTabMembers.classList.remove("active");
-    groupPanelShared.classList.remove("hidden");
-    groupPanelMembers.classList.add("hidden");
+// --- Availability Tab: Sub-Tabs & Filter Logic ---
+if (availTabShared && availTabMembers) {
+  availTabShared.addEventListener("click", () => {
+    availTabShared.classList.add("active");
+    availTabMembers.classList.remove("active");
+    if (availPanelShared) availPanelShared.classList.remove("hidden");
+    if (availPanelMembers) availPanelMembers.classList.add("hidden");
   });
 
-  modalTabMembers.addEventListener("click", () => {
-    modalTabMembers.classList.add("active");
-    modalTabShared.classList.remove("active");
-    groupPanelMembers.classList.remove("hidden");
-    groupPanelShared.classList.add("hidden");
+  availTabMembers.addEventListener("click", () => {
+    availTabMembers.classList.add("active");
+    availTabShared.classList.remove("active");
+    if (availPanelMembers) availPanelMembers.classList.remove("hidden");
+    if (availPanelShared) availPanelShared.classList.add("hidden");
   });
 }
 
-if (btnSelectAllMembers) {
-  btnSelectAllMembers.addEventListener("click", () => {
+if (availBtnSelectAllMembers) {
+  availBtnSelectAllMembers.addEventListener("click", () => {
     if (!state.currentGroupData || !state.currentGroupData.members) return;
     state.selectedMemberIds = new Set(state.currentGroupData.members.map((m) => m.user_id));
     renderMemberFilterChips();
     renderGroupSharedSlots();
+  });
+}
+
+if (btnAvailManageGroup) {
+  btnAvailManageGroup.addEventListener("click", () => {
+    if (!state.selectedGroup) return;
+    switchDashboardTab("panel-groups");
+    openGroupDetail(state.selectedGroup.id);
   });
 }
 
@@ -1533,40 +1550,21 @@ function selectGroupInAvailability(groupId, shouldScroll = false) {
   if (groupAvailNoSelection) groupAvailNoSelection.classList.add("hidden");
   if (groupAvailContent) groupAvailContent.classList.remove("hidden");
 
-  if (modalGroupName) modalGroupName.textContent = group.name;
-  if (modalGroupDesc) modalGroupDesc.textContent = group.description || "No description provided.";
-  if (modalMembersCount) {
-    modalMembersCount.textContent = `${group.member_count} member${group.member_count > 1 ? "s" : ""}`;
-  }
-  if (modalGroupInviteCode) {
-    modalGroupInviteCode.textContent = group.invite_code || "--------";
-  }
+  if (availGroupName) availGroupName.textContent = group.name;
+  if (availGroupDesc) availGroupDesc.textContent = group.description || "No description provided.";
 
   const isOwner = state.currentUser && group.owner_id === state.currentUser.id;
-  if (groupAvailRoleBadge) {
-    groupAvailRoleBadge.textContent = isOwner ? "Owner" : "Member";
-    if (isOwner) {
-      groupAvailRoleBadge.className = "badge badge-success";
-    } else {
-      groupAvailRoleBadge.className = "badge";
-    }
+  if (availGroupRoleBadge) {
+    availGroupRoleBadge.textContent = isOwner ? "Owner" : "Member";
+    availGroupRoleBadge.className = isOwner ? "badge badge-success" : "badge";
   }
 
-  // Show Add Member section only if current user is owner
-  if (isOwner) {
-    if (groupOwnerAddMemberSection) groupOwnerAddMemberSection.classList.remove("hidden");
-    if (modalLeaveGroupSection) modalLeaveGroupSection.classList.add("hidden");
-  } else {
-    if (groupOwnerAddMemberSection) groupOwnerAddMemberSection.classList.add("hidden");
-    if (modalLeaveGroupSection) modalLeaveGroupSection.classList.remove("hidden");
-  }
-
-  if (modalTabShared && modalTabMembers && groupPanelShared && groupPanelMembers) {
-    if (groupPanelShared.classList.contains("hidden") && groupPanelMembers.classList.contains("hidden")) {
-      modalTabShared.classList.add("active");
-      modalTabMembers.classList.remove("active");
-      groupPanelShared.classList.remove("hidden");
-      groupPanelMembers.classList.add("hidden");
+  if (availTabShared && availTabMembers && availPanelShared && availPanelMembers) {
+    if (availPanelShared.classList.contains("hidden") && availPanelMembers.classList.contains("hidden")) {
+      availTabShared.classList.add("active");
+      availTabMembers.classList.remove("active");
+      availPanelShared.classList.remove("hidden");
+      availPanelMembers.classList.add("hidden");
     }
   }
 
@@ -1596,14 +1594,104 @@ if (btnAvailGoToGroups) {
   });
 }
 
-window.openGroupDetail = async function (groupId) {
+// Open group availability in Availability Tab
+window.openGroupAvailability = function (groupId) {
+  if (groupDetailModal) groupDetailModal.classList.add("hidden");
   switchDashboardTab("panel-availability");
   selectGroupInAvailability(groupId, true);
 };
 
+// Open group detail & management modal in Groups Tab
+window.openGroupDetail = async function (groupId) {
+  const group = state.userGroups.find((g) => g.id === groupId);
+  if (!group) return;
+
+  state.selectedGroup = group;
+  if (modalGroupName) modalGroupName.textContent = group.name;
+  if (modalGroupDesc) modalGroupDesc.textContent = group.description || "No description provided.";
+  if (modalGroupInviteCode) {
+    modalGroupInviteCode.textContent = group.invite_code || "--------";
+  }
+
+  const isOwner = state.currentUser && group.owner_id === state.currentUser.id;
+  if (modalGroupRoleBadge) {
+    modalGroupRoleBadge.textContent = isOwner ? "Owner" : "Member";
+    modalGroupRoleBadge.className = isOwner ? "badge badge-success" : "badge";
+  }
+
+  // Show Add Member section only if current user is owner
+  if (isOwner) {
+    if (groupOwnerAddMemberSection) groupOwnerAddMemberSection.classList.remove("hidden");
+    if (modalLeaveGroupSection) modalLeaveGroupSection.classList.add("hidden");
+  } else {
+    if (groupOwnerAddMemberSection) groupOwnerAddMemberSection.classList.add("hidden");
+    if (modalLeaveGroupSection) modalLeaveGroupSection.classList.remove("hidden");
+  }
+
+  if (groupDetailModal) groupDetailModal.classList.remove("hidden");
+  await loadGroupMembersForManage(groupId);
+};
+
+// Load member list for group management modal
+async function loadGroupMembersForManage(groupId) {
+  if (!groupManageMembersList) return;
+  groupManageMembersList.innerHTML = `<p class="cal-empty-slots">Loading members...</p>`;
+
+  try {
+    const res = await fetch(`/api/groups/${groupId}/availability`, {
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    if (!res.ok) throw new Error("Failed to load group members.");
+    const data = await res.json();
+
+    if (modalMembersCount) {
+      modalMembersCount.textContent = `${data.members.length} member${data.members.length > 1 ? "s" : ""}`;
+    }
+
+    const isOwner = state.currentUser && state.selectedGroup && state.selectedGroup.owner_id === state.currentUser.id;
+
+    if (!data.members || data.members.length === 0) {
+      groupManageMembersList.innerHTML = `<p class="cal-empty-slots">No members found.</p>`;
+      return;
+    }
+
+    groupManageMembersList.innerHTML = data.members
+      .map((m) => {
+        const isMe = state.currentUser && state.currentUser.id === m.user_id;
+        const canRemove = isOwner && m.user_id !== state.selectedGroup.owner_id;
+        const removeBtn = canRemove
+          ? `<button type="button" class="btn-del-slot" onclick="removeMember(${m.user_id})" title="Remove member" style="color: #f87171; font-size: 1.1rem; cursor: pointer;">&times;</button>`
+          : "";
+
+        return `
+          <div class="member-card" style="margin-bottom: 0.5rem; padding: 0.65rem 0.85rem;">
+            <div class="member-card-header" style="margin-bottom: 0;">
+              <div>
+                <strong style="color: var(--text-main); font-size: 0.88rem;">
+                  ${escapeHtml(m.full_name || "No name provided")} ${isMe ? "(You)" : ""}
+                </strong>
+                <span style="color: var(--accent); font-size: 0.78rem; margin-left: 0.35rem;">
+                  @${escapeHtml(m.username)}
+                </span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span class="badge ${m.role === "owner" ? "badge-success" : ""}">${m.role}</span>
+                ${removeBtn}
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  } catch (err) {
+    groupManageMembersList.innerHTML = `<p class="cal-empty-slots" style="color: #f87171;">${err.message}</p>`;
+  }
+}
+
 async function loadGroupAvailability(groupId) {
-  groupSharedSlotsContainer.innerHTML = `<p class="cal-empty-slots">Loading group availability...</p>`;
-  groupMembersList.innerHTML = `<p class="cal-empty-slots">Loading member schedules...</p>`;
+  if (!availSharedSlotsContainer || !availMembersList) return;
+  availSharedSlotsContainer.innerHTML = `<p class="cal-empty-slots">Loading group availability...</p>`;
+  availMembersList.innerHTML = `<p class="cal-empty-slots">Loading member schedules...</p>`;
 
   try {
     const res = await fetch(`/api/groups/${groupId}/availability`, {
@@ -1615,24 +1703,24 @@ async function loadGroupAvailability(groupId) {
 
     state.selectedMemberIds = new Set(data.members.map((m) => m.user_id));
 
-    if (modalMembersCount) {
-      modalMembersCount.textContent = `${data.members.length} member${data.members.length > 1 ? "s" : ""}`;
+    if (availMembersCount) {
+      availMembersCount.textContent = `${data.members.length} member${data.members.length > 1 ? "s" : ""}`;
     }
 
     renderMemberFilterChips();
     renderGroupSharedSlots();
     renderGroupIndividualMembers(data.members);
   } catch (err) {
-    groupSharedSlotsContainer.innerHTML = `<p class="cal-empty-slots" style="color: #f87171;">${err.message}</p>`;
-    groupMembersList.innerHTML = `<p class="cal-empty-slots" style="color: #f87171;">${err.message}</p>`;
+    if (availSharedSlotsContainer) availSharedSlotsContainer.innerHTML = `<p class="cal-empty-slots" style="color: #f87171;">${err.message}</p>`;
+    if (availMembersList) availMembersList.innerHTML = `<p class="cal-empty-slots" style="color: #f87171;">${err.message}</p>`;
   }
 }
 
 function renderMemberFilterChips() {
-  if (!groupMemberFilterChips || !state.currentGroupData) return;
+  if (!availMemberFilterChips || !state.currentGroupData) return;
   const members = state.currentGroupData.members || [];
 
-  groupMemberFilterChips.innerHTML = members
+  availMemberFilterChips.innerHTML = members
     .map((m) => {
       const isSelected = state.selectedMemberIds.has(m.user_id);
       const isMe = state.currentUser && state.currentUser.id === m.user_id;
@@ -1663,15 +1751,15 @@ window.toggleGroupMemberFilter = function (userId) {
 };
 
 function renderGroupSharedSlots() {
-  if (!groupSharedSlotsContainer || !state.currentGroupData) return;
+  if (!availSharedSlotsContainer || !state.currentGroupData) return;
 
   const allMembers = state.currentGroupData.members || [];
   const selectedMembers = allMembers.filter((m) => state.selectedMemberIds.has(m.user_id));
   const totalSelected = selectedMembers.length;
 
   if (totalSelected === 0) {
-    groupSharedSlotsContainer.innerHTML = `<p class="cal-empty-slots">Please select at least one member to calculate shared times.</p>`;
-    if (modalSharedCountBadge) modalSharedCountBadge.textContent = "0";
+    availSharedSlotsContainer.innerHTML = `<p class="cal-empty-slots">Please select at least one member to calculate shared times.</p>`;
+    if (availSharedCountBadge) availSharedCountBadge.textContent = "0";
     return;
   }
 
@@ -1720,12 +1808,12 @@ function renderGroupSharedSlots() {
     });
   });
 
-  if (modalSharedCountBadge) {
-    modalSharedCountBadge.textContent = String(allSharedList.length);
+  if (availSharedCountBadge) {
+    availSharedCountBadge.textContent = String(allSharedList.length);
   }
 
   if (allSharedList.length === 0 && allPartialList.length === 0) {
-    groupSharedSlotsContainer.innerHTML = `
+    availSharedSlotsContainer.innerHTML = `
       <div style="text-align: center; padding: 1.5rem 1rem;">
         <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">📅</div>
         <p style="color: var(--text-main); font-weight: 600; margin-bottom: 0.35rem;">No overlapping free times found</p>
@@ -1823,21 +1911,18 @@ function renderGroupSharedSlots() {
       .join("");
   }
 
-  groupSharedSlotsContainer.innerHTML = html;
+  availSharedSlotsContainer.innerHTML = html;
 }
 
 function renderGroupIndividualMembers(members) {
-  if (!groupMembersList) return;
+  if (!availMembersList) return;
   if (!members || members.length === 0) {
-    groupMembersList.innerHTML = `<p class="cal-empty-slots">No members found in this group.</p>`;
+    availMembersList.innerHTML = `<p class="cal-empty-slots">No members found in this group.</p>`;
     return;
   }
 
-  const isOwner = state.currentUser && state.selectedGroup && state.selectedGroup.owner_id === state.currentUser.id;
-
-  groupMembersList.innerHTML = members
+  availMembersList.innerHTML = members
     .map((m) => {
-      // Format Member Availabilities
       let availHtml = "";
       if (m.availabilities && m.availabilities.length > 0) {
         availHtml = `
@@ -1860,11 +1945,6 @@ function renderGroupIndividualMembers(members) {
         availHtml = `<div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px; font-style: italic;">No availability registered yet.</div>`;
       }
 
-      const canRemove = isOwner && m.user_id !== state.selectedGroup.owner_id;
-      const removeBtn = canRemove
-        ? `<button type="button" class="btn-del-slot" onclick="removeMember(${m.user_id})" title="Remove member" style="color: #f87171; font-size: 1.1rem; cursor: pointer;">&times;</button>`
-        : "";
-
       return `
         <div class="member-card">
           <div class="member-card-header">
@@ -1876,9 +1956,8 @@ function renderGroupIndividualMembers(members) {
                 @${escapeHtml(m.username)}
               </span>
             </div>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div>
               <span class="badge ${m.role === "owner" ? "badge-success" : ""}">${m.role}</span>
-              ${removeBtn}
             </div>
           </div>
           ${availHtml}
@@ -1888,7 +1967,7 @@ function renderGroupIndividualMembers(members) {
     .join("");
 }
 
-// Remove member logic (Owner only)
+// Remove member logic (Owner only, in Groups Tab)
 window.removeMember = async function (userId) {
   if (!state.selectedGroup) return;
   const confirmed = confirm("Are you sure you want to remove this member from the group?");
@@ -1903,6 +1982,7 @@ window.removeMember = async function (userId) {
     if (!res.ok) throw new Error(data.detail || "Failed to remove member.");
 
     showToast(data.message || "Member removed.", "info");
+    await loadGroupMembersForManage(state.selectedGroup.id);
     await loadGroupAvailability(state.selectedGroup.id);
     await loadUserGroups();
   } catch (err) {
@@ -1910,7 +1990,7 @@ window.removeMember = async function (userId) {
   }
 };
 
-// Leave group logic (Non-owner members)
+// Leave group logic (Non-owner members, in Groups Tab)
 window.leaveGroup = async function (groupId, groupName) {
   const name = groupName || "this group";
   if (!confirm(`Are you sure you want to leave "${name}"?`)) {
@@ -1935,7 +2015,7 @@ window.leaveGroup = async function (groupId, groupName) {
   }
 };
 
-// Add member logic (Owner only)
+// Add member logic (Owner only, in Groups Tab)
 if (addMemberForm) {
   addMemberForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1959,6 +2039,7 @@ if (addMemberForm) {
 
       showToast(data.message || "Member added!", "success");
       addMemberForm.reset();
+      await loadGroupMembersForManage(state.selectedGroup.id);
       await loadGroupAvailability(state.selectedGroup.id);
       await loadUserGroups();
     } catch (err) {
@@ -1969,7 +2050,7 @@ if (addMemberForm) {
   });
 }
 
-// Copy Invite Code and Link
+// Copy Invite Code and Link (in Groups Tab Modal)
 if (btnCopyInviteCode) {
   btnCopyInviteCode.addEventListener("click", () => {
     if (!state.selectedGroup || !state.selectedGroup.invite_code) return;
@@ -1985,6 +2066,14 @@ if (btnCopyInviteLink) {
   });
 }
 
+// View Availability CTA inside modal
+if (btnModalViewAvail) {
+  btnModalViewAvail.addEventListener("click", () => {
+    if (!state.selectedGroup) return;
+    openGroupAvailability(state.selectedGroup.id);
+  });
+}
+
 // Leave group button inside modal
 if (btnLeaveGroup) {
   btnLeaveGroup.addEventListener("click", async () => {
@@ -1993,11 +2082,10 @@ if (btnLeaveGroup) {
   });
 }
 
-// Close Modal (legacy support)
+// Close Modal
 if (btnCloseGroupModal) {
   btnCloseGroupModal.addEventListener("click", () => {
     if (groupDetailModal) groupDetailModal.classList.add("hidden");
-    state.selectedGroup = null;
   });
 }
 
@@ -2038,6 +2126,7 @@ if (createGroupForm) {
       createGroupForm.reset();
       await loadUserGroups();
       switchDashboardTab("panel-groups");
+      openGroupDetail(data.id);
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -2077,6 +2166,7 @@ if (joinGroupForm) {
       joinGroupForm.reset();
       await loadUserGroups();
       switchDashboardTab("panel-groups");
+      openGroupDetail(data.group_id);
     } catch (err) {
       showToast(err.message, "error");
     } finally {
