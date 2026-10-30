@@ -79,6 +79,7 @@ class Group(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String(100), nullable=False)
     description = Column(String(255), nullable=True)
+    group_photo_url = Column(String, nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     invite_code = Column(String(32), unique=True, index=True, nullable=False, default=generate_invite_code)
     created_at = Column(

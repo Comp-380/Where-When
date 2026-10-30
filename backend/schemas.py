@@ -177,6 +177,7 @@ class GroupResponse(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    group_photo_url: Optional[str] = None
     owner_id: int
     invite_code: str
     member_count: int = 1
