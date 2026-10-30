@@ -297,6 +297,7 @@ def get_user_groups(
                 invite_code=g.invite_code,
                 member_count=count,
                 created_at=g.created_at,
+                group_photo_url=g.group_photo_url,
             )
         )
     return response
@@ -782,6 +783,32 @@ def upload_avatar(
     db.refresh(current_user)
     return current_user
 
+@app.put("/api/groups/{group_id}/photo", response_model=GroupResponse)
+async def upload_group_photo(
+    group_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    # Save the file following your app's existing upload structure
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+        ext = ".png"
+        
+    unique_filename = f"group_{group_id}_{uuid.uuid4().hex[:8]}{ext}"
+    dest_path = UPLOAD_DIR / unique_filename
+    
+    with dest_path.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    group.group_photo_url = f"/media/uploads/{unique_filename}"
+    db.commit()
+    db.refresh(group)
+    return group
 
 # --- Availability Endpoints ---
 @app.get(
@@ -865,7 +892,7 @@ if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 app.mount("/media/avatars", StaticFiles(directory=str(UPLOAD_DIR)), name="avatars")
-
+app.mount("/media/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads_media")
 
 @app.get("/", include_in_schema=False)
 @app.get("/reset-password", include_in_schema=False)

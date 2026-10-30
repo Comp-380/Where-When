@@ -1319,8 +1319,9 @@ function renderUserGroups() {
     .map((g) => {
       const isOwner = state.currentUser && g.owner_id === state.currentUser.id;
       return `
-        <div class="slot-item group-clickable-card" onclick="openGroupDetail(${g.id})" style="padding: 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
-          <div style="flex: 1; min-width: 0;">
+    <div class="slot-item group-clickable-card" onclick="openGroupDetail(${g.id})" style="display: flex; align-items: center; gap: 1rem;">
+        ${g.group_photo_url ? `<img src="${g.group_photo_url}" style="width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" />` : ''}
+        <div style="flex: 1; min-width: 0;">
             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
               <strong style="font-size: 0.95rem; color: var(--accent);">${escapeHtml(g.name)}</strong>
               ${g.invite_code ? `<span class="badge" style="background: rgba(255, 255, 255, 0.08); font-family: monospace; font-size: 0.7rem; letter-spacing: 0.5px;">Code: ${escapeHtml(g.invite_code)}</span>` : ""}
@@ -2118,6 +2119,19 @@ if (createGroupForm) {
       });
 
       const data = await response.json();
+      const photoInput = document.getElementById("group-photo-input");
+if (response.ok && photoInput && photoInput.files[0]) {
+    const formData = new FormData();
+    formData.append("file", photoInput.files[0]);
+
+    await fetch(`/api/groups/${data.id}/photo`, {
+        method: "PUT",
+        headers: {
+            "Authorization": `Bearer ${state.token}`
+        },
+        body: formData
+    });
+}
       if (!response.ok) {
         throw new Error(data.detail || "Failed to create group.");
       }
