@@ -398,6 +398,40 @@ def leave_group(
 
     return MessageResponse(message=f"You have left '{group.name}'.")
 
+@app.delete(
+    "/api/groups/{group_id}",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Delete a group record (owner only)",
+)
+def delete_group(
+    group_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    SCRUM-43: Permanently delete a group record.
+    Restricted strictly to the group owner. Cascades to group memberships in SQLite.
+    """
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Group not found.",
+        )
+
+    # Acceptance Criteria: Only the owner can delete the group
+    if group.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the group owner has permission to delete this group.",
+        )
+
+    group_name = group.name
+    db.delete(group)
+    db.commit()
+
+    return MessageResponse(message=f"Group '{group_name}' has been deleted successfully.")
 
 @app.get(
     "/api/groups/{group_id}/availability",

@@ -162,6 +162,8 @@ const addMemberForm = document.getElementById("add-member-form");
 const addMemberIdentifier = document.getElementById("add-member-identifier");
 const btnAddMember = document.getElementById("btn-add-member");
 const modalLeaveGroupSection = document.getElementById("modal-leave-group-section");
+const modalDeleteGroupSection = document.getElementById("modal-delete-group-section");
+const btnDeleteGroup = document.getElementById("btn-delete-group");
 const btnLeaveGroup = document.getElementById("btn-leave-group");
 
 
@@ -1620,13 +1622,15 @@ window.openGroupDetail = async function (groupId) {
     modalGroupRoleBadge.className = isOwner ? "badge badge-success" : "badge";
   }
 
-  // Show Add Member section only if current user is owner
+  // Show Add Member & Delete Group sections only if current user is owner
   if (isOwner) {
     if (groupOwnerAddMemberSection) groupOwnerAddMemberSection.classList.remove("hidden");
     if (modalLeaveGroupSection) modalLeaveGroupSection.classList.add("hidden");
+    if (modalDeleteGroupSection) modalDeleteGroupSection.classList.remove("hidden");
   } else {
     if (groupOwnerAddMemberSection) groupOwnerAddMemberSection.classList.add("hidden");
     if (modalLeaveGroupSection) modalLeaveGroupSection.classList.remove("hidden");
+    if (modalDeleteGroupSection) modalDeleteGroupSection.classList.add("hidden");
   }
 
   if (groupDetailModal) groupDetailModal.classList.remove("hidden");
@@ -2080,6 +2084,43 @@ if (btnLeaveGroup) {
   btnLeaveGroup.addEventListener("click", async () => {
     if (!state.selectedGroup) return;
     await leaveGroup(state.selectedGroup.id, state.selectedGroup.name);
+  });
+}
+
+// SCRUM-43: Delete group logic (Owner only, in Groups Tab)
+window.deleteGroup = async function (groupId, groupName) {
+  const name = groupName || "this group";
+  const confirmed = confirm(`Are you sure you want to permanently delete "${name}"? This action cannot be undone and will remove all group memberships.`);
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`/api/groups/${groupId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Failed to delete group.");
+
+    showToast(data.message || `Deleted "${name}" successfully.`, "info");
+    
+    // Close modal and reset state
+    if (groupDetailModal) groupDetailModal.classList.add("hidden");
+    if (state.selectedGroup && state.selectedGroup.id === groupId) {
+      state.selectedGroup = null;
+    }
+
+    // Refresh user group lists and availability dropdowns
+    await loadUserGroups();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+};
+
+// Event listener for Delete Group button inside modal
+if (btnDeleteGroup) {
+  btnDeleteGroup.addEventListener("click", async () => {
+    if (!state.selectedGroup) return;
+    await deleteGroup(state.selectedGroup.id, state.selectedGroup.name);
   });
 }
 
