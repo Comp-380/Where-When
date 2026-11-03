@@ -133,6 +133,41 @@ The test suite runs against an isolated, high-speed in-memory SQLite database ve
 
 ---
 
+## Continuous Integration
+
+The [CI workflow](.github/workflows/ci.yml) runs on every pull request and
+every push to `main`. Each job uses an isolated Ubuntu 24.04 container with
+Python 3.12, installs `requirements.txt`, and runs `pytest -v` across all tests
+discovered by `pytest.ini`. This currently includes authentication, groups,
+and availability. Any profile tests added under `tests/test_*.py` will also run
+automatically. Tests use an in-memory SQLite database; application startup
+uses a separate temporary database inside the container. No secrets or external
+database services are required.
+
+### Required protection for `main`
+
+Branch protection is a GitHub repository setting, separate from the workflow.
+A repository administrator must configure it in **Settings → Branches → Add
+branch protection rule** for `main`:
+
+- Require a pull request before merging with at least **1 approving review**.
+- Dismiss stale pull request approvals when new commits are pushed.
+- Require status checks to pass before merging and select **Python tests**
+  from the CI workflow after its first run.
+- Require branches to be up to date before merging.
+- Enable **Do not allow bypassing the above settings** so administrators also
+  follow the review and CI requirements.
+- Leave force pushes and branch deletions disabled.
+
+**Setup status:** GitHub currently returns HTTP 403 for branch protection on
+the private `Comp-380/Where-When` repository, requesting a plan upgrade or a
+public repository. Protection has therefore not been enabled. An organization
+owner must enable a plan that supports private repository branch protection
+before an administrator can apply these settings. See
+[GitHub's branch protection documentation](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
+
+---
+
 ## 📡 API Endpoints Reference
 
 | Method | Endpoint | Description | Protected |
