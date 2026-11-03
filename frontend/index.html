@@ -225,6 +225,202 @@
       border-radius: 999px;
     }
 
+    .hangout-place-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      color: #c7d2fe;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .poll-section {
+      margin-top: 0.85rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .poll-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      font-size: 0.76rem;
+      color: var(--text-muted);
+    }
+
+    .poll-options-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-bottom: 0.55rem;
+    }
+
+    .poll-option-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      border-radius: 999px;
+      padding: 0.3rem 0.75rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .poll-option-btn:hover {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .poll-option-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+    }
+
+    .poll-option-btn.opt-yes.active {
+      background: #10b981;
+      border-color: #10b981;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+    }
+
+    .poll-option-btn.opt-no.active {
+      background: #ef4444;
+      border-color: #ef4444;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+    }
+
+    .poll-stat-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      opacity: 0.9;
+      background: rgba(0, 0, 0, 0.28);
+      padding: 0.1rem 0.4rem;
+      border-radius: 999px;
+      margin-left: 0.25rem;
+    }
+
+    .poll-progress-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+      display: flex;
+      margin-bottom: 0.45rem;
+    }
+
+    .poll-progress-segment {
+      height: 100%;
+      transition: width 0.3s ease;
+    }
+
+    .btn-del-option {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.45);
+      cursor: pointer;
+      font-size: 0.85rem;
+      line-height: 1;
+      padding: 0 0.15rem;
+      margin-left: 0.2rem;
+      transition: color 0.15s;
+    }
+
+    .btn-del-option:hover {
+      color: #f87171;
+    }
+
+    .add-option-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      background: transparent;
+      border: 1px dashed var(--border-color);
+      color: var(--text-muted);
+      border-radius: 999px;
+      padding: 0.3rem 0.65rem;
+      font-size: 0.74rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .add-option-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .poll-add-form {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-top: 0.45rem;
+    }
+
+    .poll-add-input {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      border-radius: var(--radius-sm);
+      padding: 0.28rem 0.6rem;
+      font-size: 0.76rem;
+      flex: 1;
+      max-width: 240px;
+    }
+
+    .poll-add-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .group-opt-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      padding: 0.25rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      color: var(--text-main);
+    }
+
+    .group-opt-chip.default-opt {
+      border-color: rgba(99, 102, 241, 0.3);
+      background: rgba(99, 102, 241, 0.08);
+    }
+
+    .btn-del-group-opt {
+      background: none;
+      border: none;
+      color: #f87171;
+      font-size: 0.95rem;
+      cursor: pointer;
+      padding: 0 0.15rem;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s ease;
+    }
+
+    .btn-del-group-opt:hover {
+      color: #ef4444;
+    }
+
+
     .group-select-dropdown {
       background: var(--bg-input);
       color: var(--text-main);
@@ -1022,6 +1218,38 @@
           </form>
         </div>
 
+        <!-- Group Poll Options Section (All Current & Future Polls) -->
+        <div id="group-poll-options-section" style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <label style="font-size: 0.8rem; font-weight: 600; color: var(--accent); margin: 0;">
+              🗳️ Hangout Poll Options (All Current & Future Polls)
+            </label>
+            <span id="group-poll-options-hint" style="font-size: 0.72rem; color: var(--text-muted);">
+              Applied automatically across all hangout slots
+            </span>
+          </div>
+          <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 0 0 0.5rem 0;">
+            Options available to group members when voting on hangout times.
+          </p>
+
+          <div id="group-poll-options-list" style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem;">
+            <!-- Dynamically populated option chips -->
+          </div>
+
+          <!-- Add Option Form (visible only to Group Owner) -->
+          <div id="group-owner-add-poll-option-section" class="hidden">
+            <form id="group-add-poll-option-form" style="display: flex; gap: 0.5rem;">
+              <div class="input-wrapper" style="flex: 1;">
+                <input type="text" id="group-poll-option-input" placeholder="e.g. Maybe, Drinks instead, Virtual" maxlength="100" style="padding: 0.45rem 0.75rem; font-size: 0.82rem;" />
+              </div>
+              <button type="submit" id="btn-group-add-poll-option" class="btn-primary" style="width: auto; padding: 0.45rem 0.9rem; font-size: 0.82rem;">
+                <span class="btn-text">+ Add Option</span>
+                <div class="spinner hidden"></div>
+              </button>
+            </form>
+          </div>
+        </div>
+
         <!-- Group Members List Header -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
           <h4 style="margin: 0; font-size: 0.92rem; color: var(--text-main);">Group Members</h4>
@@ -1048,6 +1276,8 @@
             Delete Group
           </button>
         </div>
+      </div>
+    </div>
 
 
     

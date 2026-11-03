@@ -235,3 +235,17 @@ def get_current_user(
         raise unauthorized_exception
 
     return user
+
+
+def decode_access_token_user(token: str, db: Session) -> Optional[User]:
+    """Decodes access token and returns User if valid, else None."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "access":
+            return None
+        user_id = payload.get("sub")
+        if user_id is None:
+            return None
+        return db.query(User).filter(User.id == int(user_id), User.is_active == True).first()
+    except Exception:
+        return None

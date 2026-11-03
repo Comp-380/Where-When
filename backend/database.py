@@ -43,6 +43,9 @@ def initialize_database(db_engine=engine):
         if "invite_code" not in columns:
             with db_engine.begin() as connection:
                 connection.execute(text("ALTER TABLE groups ADD COLUMN invite_code VARCHAR(32)"))
+        if "group_photo_url" not in columns:
+            with db_engine.begin() as connection:
+                connection.execute(text("ALTER TABLE groups ADD COLUMN group_photo_url VARCHAR(255)"))
 
         # Backfill existing groups that lack an invite code
         SessionClass = sessionmaker(bind=db_engine)

@@ -90,3 +90,82 @@ class Group(Base):
 
     owner = relationship("User")
     members = relationship("GroupMember", back_populates="group", cascade="all, delete-orphan")
+    polls = relationship("HangoutPoll", back_populates="group", cascade="all, delete-orphan")
+    group_poll_options = relationship("GroupPollOption", back_populates="group", cascade="all, delete-orphan", order_by="GroupPollOption.id")
+
+
+class GroupPollOption(Base):
+    __tablename__ = "group_poll_options"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    group_id = Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    text = Column(String(100), nullable=False)
+    is_default = Column(Boolean, default=False, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    group = relationship("Group", back_populates="group_poll_options")
+
+
+
+class HangoutPoll(Base):
+    __tablename__ = "hangout_polls"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    group_id = Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    date = Column(Date, nullable=False, index=True)
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+    place = Column(String(100), default="Dinner at a restaurant", nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    group = relationship("Group", back_populates="polls")
+    options = relationship("PollOption", back_populates="poll", cascade="all, delete-orphan", order_by="PollOption.id")
+    votes = relationship("PollVote", back_populates="poll", cascade="all, delete-orphan")
+
+
+class PollOption(Base):
+    __tablename__ = "poll_options"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    poll_id = Column(Integer, ForeignKey("hangout_polls.id", ondelete="CASCADE"), nullable=False, index=True)
+    text = Column(String(100), nullable=False)
+    is_default = Column(Boolean, default=False, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    poll = relationship("HangoutPoll", back_populates="options")
+    votes = relationship("PollVote", back_populates="option", cascade="all, delete-orphan")
+
+
+class PollVote(Base):
+    __tablename__ = "poll_votes"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    poll_id = Column(Integer, ForeignKey("hangout_polls.id", ondelete="CASCADE"), nullable=False, index=True)
+    option_id = Column(Integer, ForeignKey("poll_options.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("poll_id", "user_id", name="uq_poll_user_vote"),
+    )
+
+    poll = relationship("HangoutPoll", back_populates="votes")
+    option = relationship("PollOption", back_populates="votes")
+    user = relationship("User")
+
