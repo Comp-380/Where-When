@@ -7,6 +7,7 @@ const state = {
   userAvailabilities: [],
   userGroups: [],
   selectedGroup: null,
+  currentGroupPolls: {},
 };
 
 // DOM Elements
@@ -836,6 +837,7 @@ function renderDashboard(user) {
 
 // Logout Handler
 btnLogout.addEventListener("click", () => {
+  disconnectGroupWebSocket();
   state.token = null;
   state.currentUser = null;
   localStorage.removeItem("token");
@@ -1622,19 +1624,23 @@ window.openGroupDetail = async function (groupId) {
     modalGroupRoleBadge.className = isOwner ? "badge badge-success" : "badge";
   }
 
-  // Show Add Member & Delete Group sections only if current user is owner
+  // Show Add Member, Add Option & Delete Group sections only if current user is owner
+  const groupOwnerAddPollOptionSection = document.getElementById("group-owner-add-poll-option-section");
   if (isOwner) {
     if (groupOwnerAddMemberSection) groupOwnerAddMemberSection.classList.remove("hidden");
+    if (groupOwnerAddPollOptionSection) groupOwnerAddPollOptionSection.classList.remove("hidden");
     if (modalLeaveGroupSection) modalLeaveGroupSection.classList.add("hidden");
     if (modalDeleteGroupSection) modalDeleteGroupSection.classList.remove("hidden");
   } else {
     if (groupOwnerAddMemberSection) groupOwnerAddMemberSection.classList.add("hidden");
+    if (groupOwnerAddPollOptionSection) groupOwnerAddPollOptionSection.classList.add("hidden");
     if (modalLeaveGroupSection) modalLeaveGroupSection.classList.remove("hidden");
     if (modalDeleteGroupSection) modalDeleteGroupSection.classList.add("hidden");
   }
 
   if (groupDetailModal) groupDetailModal.classList.remove("hidden");
   await loadGroupMembersForManage(groupId);
+  await loadGroupPollOptions(groupId);
 };
 
 // Load member list for group management modal
@@ -1693,18 +1699,289 @@ async function loadGroupMembersForManage(groupId) {
   }
 }
 
+// Load poll options for group management in Groups tab
+async function loadGroupPollOptions(groupId) {
+  const container = document.getElementById("group-poll-options-list");
+  if (!container) return;
+  container.innerHTML = `<span style="font-size: 0.75rem; color: var(--text-muted);">Loading options...</span>`;
+
+  try {
+    const res = await fetch(`/api/groups/${groupId}/poll-options`, {
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    if (!res.ok) throw new Error("Failed to load group poll options.");
+    const options = await res.json();
+    state.currentGroupPollOptions = options;
+
+    const isOwner = Boolean(
+      state.currentUser &&
+      state.selectedGroup &&
+      state.selectedGroup.owner_id === state.currentUser.id
+    );
+
+    if (!options || options.length === 0) {
+      container.innerHTML = `<span style="font-size: 0.75rem; color: var(--text-muted);">No options configured.</span>`;
+      return;
+    }
+
+    container.innerHTML = options
+      .map((opt) => {
+        const isDefault = opt.is_default;
+        const deleteBtn = isOwner && !isDefault
+          ? `<button type="button" class="btn-del-group-opt" onclick="deleteGroupPollOption(${groupId}, ${opt.id})" title="Remove option from all polls">&times;</button>`
+          : "";
+        return `
+          <span class="group-opt-chip ${isDefault ? 'default-opt' : ''}">
+            <span>${escapeHtml(opt.text)}</span>
+            ${isDefault ? '<small style="font-size: 0.68rem; color: var(--text-muted);">(Default)</small>' : ''}
+            ${deleteBtn}
+          </span>
+        `;
+      })
+      .join("");
+  } catch (err) {
+    container.innerHTML = `<span style="font-size: 0.75rem; color: #f87171;">${escapeHtml(err.message)}</span>`;
+  }
+}
+
+window.deleteGroupPollOption = async function (groupId, optionId) {
+  if (!confirm("Remove this option from all current and future group polls?")) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/groups/${groupId}/poll-options/${optionId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Failed to remove option.");
+    }
+    const updatedOptions = await res.json();
+    state.currentGroupPollOptions = updatedOptions;
+    await loadGroupPollOptions(groupId);
+    showToast("Poll option removed from all polls.", "info");
+    if (state.selectedGroup && state.selectedGroup.id === groupId) {
+      await loadGroupAvailability(groupId);
+    }
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+};
+
+// ==================== REAL-TIME HANGOUT POLLS & VOTING ====================
+
+let groupWebSocket = null;
+
+function connectGroupWebSocket(groupId) {
+  if (!groupId || !state.token) return;
+  if (groupWebSocket) {
+    try {
+      groupWebSocket.close();
+    } catch (_) {}
+    groupWebSocket = null;
+  }
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsUrl = `${protocol}//${window.location.host}/ws/groups/${groupId}?token=${encodeURIComponent(state.token)}`;
+
+  try {
+    groupWebSocket = new WebSocket(wsUrl);
+
+    groupWebSocket.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "POLL_UPDATED" && msg.poll) {
+          updatePollCardDOM(msg.poll);
+        } else if (msg.type === "GROUP_OPTIONS_UPDATED") {
+          if (state.selectedGroup && state.selectedGroup.id === msg.group_id) {
+            loadGroupPollOptions(msg.group_id);
+            loadGroupAvailability(msg.group_id);
+          }
+        }
+      } catch (err) {
+        console.warn("WebSocket parse error:", err);
+      }
+    };
+
+    groupWebSocket.onclose = () => {
+      groupWebSocket = null;
+    };
+
+    groupWebSocket.onerror = (err) => {
+      console.warn("WebSocket error:", err);
+    };
+  } catch (e) {
+    console.warn("Failed to initiate WebSocket:", e);
+  }
+}
+
+function disconnectGroupWebSocket() {
+  if (groupWebSocket) {
+    try {
+      groupWebSocket.close();
+    } catch (_) {}
+    groupWebSocket = null;
+  }
+}
+
+function renderPollHtml(poll, isLeader, groupId) {
+  if (!poll) return "";
+  const totalVotes = poll.total_votes || 0;
+
+  // Progress bar segments
+  const progressBars = (poll.options || []).map((opt) => {
+    let color = "#6366f1";
+    if (opt.text.toLowerCase() === "yes") color = "#10b981";
+    else if (opt.text.toLowerCase() === "no") color = "#ef4444";
+    return `<div class="poll-progress-segment" style="width: ${opt.percentage}%; background: ${color};" title="${escapeHtml(opt.text)}: ${opt.count} (${opt.percentage}%)"></div>`;
+  }).join("");
+
+  // Option buttons
+  const optionsHtml = (poll.options || []).map((opt) => {
+    const isVoted = poll.my_vote_option_id === opt.id;
+    const textLower = opt.text.toLowerCase();
+    let optClass = "poll-option-btn";
+    if (textLower === "yes") optClass += " opt-yes";
+    if (textLower === "no") optClass += " opt-no";
+    if (isVoted) optClass += " active";
+
+    return `
+      <button type="button" class="${optClass}" onclick="castHangoutVote(${groupId}, ${poll.id}, ${opt.id})" title="${opt.voters && opt.voters.length ? `Voters: @${opt.voters.join(', @')}` : 'No votes yet'}">
+        <span>${textLower === "yes" ? "👍 " : (textLower === "no" ? "👎 " : "")}${escapeHtml(opt.text)}</span>
+        <span class="poll-stat-badge">${opt.count} (${opt.percentage}%)</span>
+      </button>
+    `;
+  }).join("");
+
+  return `
+    <div class="poll-section" id="poll-section-${poll.id}">
+      <div class="poll-header">
+        <span class="hangout-place-badge">🍽️ Place: ${escapeHtml(poll.place || "Dinner at a restaurant")}</span>
+        <span style="font-size: 0.74rem;">${totalVotes} vote${totalVotes === 1 ? "" : "s"} total</span>
+      </div>
+      <div class="poll-progress-container">
+        ${totalVotes > 0 ? progressBars : `<div class="poll-progress-segment" style="width: 100%; background: rgba(255,255,255,0.06);"></div>`}
+      </div>
+      <div class="poll-options-list">
+        ${optionsHtml}
+      </div>
+    </div>
+  `;
+}
+
+function updatePollCardDOM(poll) {
+  if (!poll) return;
+  state.currentGroupPolls[poll.id] = poll;
+  const pollKey = `${poll.date}_${poll.start_time.slice(0, 5)}_${poll.end_time.slice(0, 5)}`;
+  state.currentGroupPolls[pollKey] = poll;
+
+  const pollSection = document.getElementById(`poll-section-${poll.id}`);
+  if (pollSection) {
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = renderPollHtml(poll, false, poll.group_id);
+    const newSection = tempDiv.firstElementChild;
+    if (newSection) {
+      pollSection.replaceWith(newSection);
+    }
+  }
+}
+
+window.castHangoutVote = async function (groupId, pollId, optionId) {
+  if (!state.token) return;
+  try {
+    const res = await fetch(`/api/groups/${groupId}/hangouts/${pollId}/vote`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${state.token}`,
+      },
+      body: JSON.stringify({ option_id: optionId }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Failed to submit vote.");
+    }
+    const updatedPoll = await res.json();
+    updatePollCardDOM(updatedPoll);
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+};
+
+const groupAddPollOptionForm = document.getElementById("group-add-poll-option-form");
+const groupPollOptionInput = document.getElementById("group-poll-option-input");
+if (groupAddPollOptionForm) {
+  groupAddPollOptionForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!state.selectedGroup || !groupPollOptionInput) return;
+    const text = groupPollOptionInput.value.trim();
+    if (!text) {
+      showToast("Please enter an option name.", "info");
+      return;
+    }
+
+    const btn = document.getElementById("btn-group-add-poll-option");
+    const btnText = btn ? btn.querySelector(".btn-text") : null;
+    const spinner = btn ? btn.querySelector(".spinner") : null;
+    if (btnText) btnText.classList.add("hidden");
+    if (spinner) spinner.classList.remove("hidden");
+    if (btn) btn.disabled = true;
+
+    try {
+      const res = await fetch(`/api/groups/${state.selectedGroup.id}/poll-options`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${state.token}`,
+        },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to add option.");
+      }
+      const updatedOptions = await res.json();
+      state.currentGroupPollOptions = updatedOptions;
+      groupPollOptionInput.value = "";
+      await loadGroupPollOptions(state.selectedGroup.id);
+      showToast(`Added option "${text}" to all current and future polls!`, "success");
+      if (state.selectedGroup) {
+        await loadGroupAvailability(state.selectedGroup.id);
+      }
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      if (btnText) btnText.classList.remove("hidden");
+      if (spinner) spinner.classList.add("hidden");
+      if (btn) btn.disabled = false;
+    }
+  });
+}
+
 async function loadGroupAvailability(groupId) {
   if (!availSharedSlotsContainer || !availMembersList) return;
   availSharedSlotsContainer.innerHTML = `<p class="cal-empty-slots">Loading group availability...</p>`;
   availMembersList.innerHTML = `<p class="cal-empty-slots">Loading member schedules...</p>`;
 
   try {
+    connectGroupWebSocket(groupId);
     const res = await fetch(`/api/groups/${groupId}/availability`, {
       headers: { Authorization: `Bearer ${state.token}` },
     });
     if (!res.ok) throw new Error("Failed to load group availability.");
     const data = await res.json();
     state.currentGroupData = data;
+
+    state.currentGroupPolls = {};
+    if (data.polls && Array.isArray(data.polls)) {
+      data.polls.forEach((p) => {
+        state.currentGroupPolls[p.id] = p;
+        const key = `${p.date}_${p.start_time.slice(0, 5)}_${p.end_time.slice(0, 5)}`;
+        state.currentGroupPolls[key] = p;
+      });
+    }
 
     state.selectedMemberIds = new Set(data.members.map((m) => m.user_id));
 
@@ -1850,6 +2127,15 @@ function renderGroupSharedSlots() {
           .map((u) => `<span class="avail-pill" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #34d399;">@${escapeHtml(u)}</span>`)
           .join("");
 
+        const pollKey = `${slot.date}_${slot.start_time.slice(0, 5)}_${slot.end_time.slice(0, 5)}`;
+        const poll = (state.currentGroupPolls && state.currentGroupPolls[pollKey]) || null;
+        const isLeader = Boolean(
+          state.selectedGroup &&
+          state.currentUser &&
+          state.selectedGroup.owner_id === state.currentUser.id
+        );
+        const pollHtml = renderPollHtml(poll, isLeader, state.selectedGroup ? state.selectedGroup.id : null);
+
         return `
           <div class="shared-slot-card">
             <div class="shared-slot-header">
@@ -1868,6 +2154,7 @@ function renderGroupSharedSlots() {
               <span style="font-size: 0.72rem; color: var(--text-secondary);">Available:</span>
               ${userTags}
             </div>
+            ${pollHtml}
           </div>
         `;
       })
@@ -1892,6 +2179,15 @@ function renderGroupSharedSlots() {
           .map((u) => `<span class="avail-pill" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">@${escapeHtml(u)}</span>`)
           .join("");
 
+        const pollKey = `${slot.date}_${slot.start_time.slice(0, 5)}_${slot.end_time.slice(0, 5)}`;
+        const poll = (state.currentGroupPolls && state.currentGroupPolls[pollKey]) || null;
+        const isLeader = Boolean(
+          state.selectedGroup &&
+          state.currentUser &&
+          state.selectedGroup.owner_id === state.currentUser.id
+        );
+        const pollHtml = renderPollHtml(poll, isLeader, state.selectedGroup ? state.selectedGroup.id : null);
+
         return `
           <div class="shared-slot-card partial">
             <div class="shared-slot-header">
@@ -1910,6 +2206,7 @@ function renderGroupSharedSlots() {
               <span style="font-size: 0.72rem; color: var(--text-secondary);">Available:</span>
               ${userTags}
             </div>
+            ${pollHtml}
           </div>
         `;
       })

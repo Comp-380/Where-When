@@ -185,6 +185,56 @@ class GroupResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class GroupPollOptionResponse(BaseModel):
+    id: int
+    group_id: int
+    text: str
+    is_default: bool
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PollOptionCreate(BaseModel):
+    text: str = Field(..., min_length=1, max_length=100)
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, v: str) -> str:
+        clean = v.strip()
+        if not clean:
+            raise ValueError("Option text cannot be empty.")
+        return clean
+
+
+class PollVoteRequest(BaseModel):
+    option_id: int
+
+
+class PollOptionResponse(BaseModel):
+    id: int
+    poll_id: int
+    text: str
+    is_default: bool
+    count: int = 0
+    percentage: float = 0.0
+    voters: List[str] = []
+    model_config = ConfigDict(from_attributes=True)
+
+
+class HangoutPollResponse(BaseModel):
+    id: int
+    group_id: int
+    date: DateType
+    start_time: TimeType
+    end_time: TimeType
+    place: str
+    total_votes: int = 0
+    my_vote_option_id: Optional[int] = None
+    options: List[PollOptionResponse] = []
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CommonAvailabilitySlot(BaseModel):
     date: DateType
     start_time: TimeType
@@ -193,6 +243,7 @@ class CommonAvailabilitySlot(BaseModel):
     total_member_count: int
     is_everyone: bool
     available_users: List[str]
+    poll: Optional[HangoutPollResponse] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -203,4 +254,6 @@ class GroupAvailabilityResponse(BaseModel):
     members: List[GroupMemberResponse]
     shared_slots: List[CommonAvailabilitySlot]
     partial_slots: List[CommonAvailabilitySlot] = []
+    polls: List[HangoutPollResponse] = []
     model_config = ConfigDict(from_attributes=True)
+
