@@ -212,6 +212,7 @@ def resend_verification(
 def login(login_in: UserLogin, db: Session = Depends(get_db)):
     identifier = login_in.identifier.strip().lower()
     user = db.query(User).filter((User.email == identifier) | (User.username == identifier)).first()
+
     if not user or not verify_password(login_in.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -341,7 +342,6 @@ def join_group(
             detail="Invalid invite code. Group not found.",
         )
 
-    # Check if user is already a member
     existing_mem = (
         db.query(GroupMember)
         .filter(GroupMember.group_id == group.id, GroupMember.user_id == current_user.id)
@@ -362,7 +362,6 @@ def join_group(
     db.commit()
 
     count = db.query(GroupMember).filter(GroupMember.group_id == group.id).count()
-
     return GroupResponse(
         id=group.id,
         name=group.name,
@@ -394,7 +393,6 @@ def leave_group(
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
-
     if group.owner_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -414,8 +412,8 @@ def leave_group(
 
     db.delete(membership)
     db.commit()
-
     return MessageResponse(message=f"You have left '{group.name}'.")
+
 
 @app.delete(
     "/api/groups/{group_id}",
@@ -428,18 +426,12 @@ def delete_group(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    SCRUM-43: Permanently delete a group record.
-    Restricted strictly to the group owner. Cascades to group memberships in SQLite.
-    """
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Group not found.",
         )
-
-    # Acceptance Criteria: Only the owner can delete the group
     if group.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -449,8 +441,8 @@ def delete_group(
     group_name = group.name
     db.delete(group)
     db.commit()
-
     return MessageResponse(message=f"Group '{group_name}' has been deleted successfully.")
+
 
 @app.get(
     "/api/groups/{group_id}/availability",
@@ -529,7 +521,6 @@ def get_group_availability(
     for d in sorted(dates_map.keys()):
         day_user_intervals = dates_map[d]
         mutual = compute_mutual_intervals(day_user_intervals, total_considered)
-
         for slot in mutual["shared_slots"]:
             all_shared_slots.append(
                 CommonAvailabilitySlot(
@@ -542,7 +533,6 @@ def get_group_availability(
                     available_users=slot["users"],
                 )
             )
-
         for slot in mutual["partial_slots"]:
             is_ev = slot["count"] == total_considered
             all_partial_slots.append(
@@ -561,10 +551,16 @@ def get_group_availability(
     poll_map = sync_group_hangout_polls(group.id, all_shared_slots, db)
     for slot in all_shared_slots:
         key = (slot.date, slot.start_time, slot.end_time)
-        if key in poll_map:
+        if key in poll_map and not getattr(poll_map[key], "is_deleted", False):
             slot.poll = build_poll_response(poll_map[key], current_user.id)
+        else:
+            slot.poll = None
 
-    all_polls = [build_poll_response(p, current_user.id) for p in poll_map.values()]
+    all_polls = [
+        build_poll_response(p, current_user.id)
+        for p in poll_map.values()
+        if not getattr(p, "is_deleted", False)
+    ]
 
     return GroupAvailabilityResponse(
         group_id=group.id,
@@ -645,6 +641,8 @@ def sync_group_hangout_polls(
 ) -> Dict[Tuple[date, time, time], HangoutPoll]:
     group_options = ensure_group_poll_options(group_id, db)
     poll_map = {}
+    
+    # Query all polls including soft-deleted ones so we NEVER recreate them
     existing_polls = db.query(HangoutPoll).filter(HangoutPoll.group_id == group_id).all()
     for p in existing_polls:
         poll_map[(p.date, p.start_time, p.end_time)] = p
@@ -653,12 +651,14 @@ def sync_group_hangout_polls(
     for s in slots:
         key = (s.date, s.start_time, s.end_time)
         if key not in poll_map:
+            # Genuinely new slot: create poll
             new_poll = HangoutPoll(
                 group_id=group_id,
                 date=s.date,
                 start_time=s.start_time,
                 end_time=s.end_time,
                 place="Dinner at a restaurant",
+                is_deleted=False,
             )
             db.add(new_poll)
             db.flush()
@@ -667,18 +667,19 @@ def sync_group_hangout_polls(
             poll_map[key] = new_poll
             changed_any = True
         else:
+            # Poll already exists (or was deleted); update options only if NOT deleted
             curr_poll = poll_map[key]
-            existing_texts = {opt.text.lower() for opt in curr_poll.options}
-            for g_opt in group_options:
-                if g_opt.text.lower() not in existing_texts:
-                    db.add(PollOption(poll_id=curr_poll.id, text=g_opt.text, is_default=g_opt.is_default))
-                    changed_any = True
+            if not getattr(curr_poll, "is_deleted", False):
+                existing_texts = {opt.text.lower() for opt in curr_poll.options}
+                for g_opt in group_options:
+                    if g_opt.text.lower() not in existing_texts:
+                        db.add(PollOption(poll_id=curr_poll.id, text=g_opt.text, is_default=g_opt.is_default))
+                        changed_any = True
 
     if changed_any:
         db.commit()
         for p in poll_map.values():
             db.refresh(p)
-
     return poll_map
 
 
@@ -702,7 +703,6 @@ def get_group_poll_options(
     )
     if not user_mem:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
-
     return ensure_group_poll_options(group_id, db)
 
 
@@ -720,7 +720,6 @@ async def add_group_poll_option(
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
-
     if group.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -739,16 +738,16 @@ async def add_group_poll_option(
     db.add(new_g_opt)
     db.flush()
 
-    # Automatically add to all current polls for this group
-    existing_polls = db.query(HangoutPoll).filter(HangoutPoll.group_id == group_id).all()
+    existing_polls = db.query(HangoutPoll).filter(
+        HangoutPoll.group_id == group_id,
+        HangoutPoll.is_deleted == False
+    ).all()
     for p in existing_polls:
         existing_texts = {o.text.lower() for o in p.options}
         if clean_text.lower() not in existing_texts:
             db.add(PollOption(poll_id=p.id, text=clean_text, is_default=False))
-
     db.commit()
 
-    # Broadcast updated polls across the group in real time!
     for p in existing_polls:
         db.refresh(p)
         poll_resp = build_poll_response(p)
@@ -784,7 +783,6 @@ async def delete_group_poll_option(
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
-
     if group.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -798,7 +796,6 @@ async def delete_group_poll_option(
     )
     if not opt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Option not found.")
-
     if opt.is_default:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -808,16 +805,16 @@ async def delete_group_poll_option(
     opt_text = opt.text
     db.delete(opt)
 
-    # Remove this option from all polls of this group
-    existing_polls = db.query(HangoutPoll).filter(HangoutPoll.group_id == group_id).all()
+    existing_polls = db.query(HangoutPoll).filter(
+        HangoutPoll.group_id == group_id,
+        HangoutPoll.is_deleted == False
+    ).all()
     for p in existing_polls:
         for p_opt in list(p.options):
             if p_opt.text.lower() == opt_text.lower():
                 db.delete(p_opt)
-
     db.commit()
 
-    # Broadcast updated polls across the group in real time!
     for p in existing_polls:
         db.refresh(p)
         poll_resp = build_poll_response(p)
@@ -842,7 +839,7 @@ async def delete_group_poll_option(
 @app.get(
     "/api/groups/{group_id}/hangouts",
     response_model=List[HangoutPollResponse],
-    summary="Get all hangout polls and votes for a group",
+    summary="Get all active hangout polls and votes for a group",
 )
 def get_group_hangouts(
     group_id: int,
@@ -859,9 +856,50 @@ def get_group_hangouts(
     )
     if not user_mem:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
-
-    polls = db.query(HangoutPoll).filter(HangoutPoll.group_id == group_id).order_by(HangoutPoll.date.asc(), HangoutPoll.start_time.asc()).all()
+    polls = db.query(HangoutPoll).filter(
+        HangoutPoll.group_id == group_id,
+        HangoutPoll.is_deleted == False
+    ).order_by(HangoutPoll.date.asc(), HangoutPoll.start_time.asc()).all()
     return [build_poll_response(p, current_user.id) for p in polls]
+
+
+@app.delete(
+    "/api/groups/{group_id}/hangouts/{poll_id}",
+    response_model=MessageResponse,
+    summary="Group owner deletes a specific hangout poll",
+)
+async def delete_hangout_poll(
+    group_id: int,
+    poll_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+    if group.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the group owner has permission to delete polls.",
+        )
+
+    poll = db.query(HangoutPoll).filter(HangoutPoll.id == poll_id, HangoutPoll.group_id == group_id).first()
+    if not poll:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Poll not found.")
+
+    poll.is_deleted = True
+    db.commit()
+
+    await ws_manager.broadcast_to_group(group_id, {
+        "type": "POLL_DELETED",
+        "poll_id": poll_id,
+        "group_id": group_id,
+        "date": str(poll.date),
+        "start_time": str(poll.start_time),
+        "end_time": str(poll.end_time),
+    })
+
+    return MessageResponse(message="Poll deleted successfully.")
 
 
 @app.post(
@@ -887,7 +925,11 @@ async def cast_hangout_vote(
     if not user_mem:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
 
-    poll = db.query(HangoutPoll).filter(HangoutPoll.id == poll_id, HangoutPoll.group_id == group_id).first()
+    poll = db.query(HangoutPoll).filter(
+        HangoutPoll.id == poll_id,
+        HangoutPoll.group_id == group_id,
+        HangoutPoll.is_deleted == False
+    ).first()
     if not poll:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hangout poll not found.")
 
@@ -900,7 +942,6 @@ async def cast_hangout_vote(
         .filter(PollVote.poll_id == poll_id, PollVote.user_id == current_user.id)
         .first()
     )
-
     if existing_vote:
         if existing_vote.option_id == option.id:
             db.delete(existing_vote)
@@ -918,7 +959,6 @@ async def cast_hangout_vote(
         "type": "POLL_UPDATED",
         "poll": poll_resp.model_dump(mode="json"),
     })
-
     return poll_resp
 
 
@@ -937,14 +977,17 @@ async def add_poll_option(
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
-
     if group.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the group leader can add poll options.",
         )
 
-    poll = db.query(HangoutPoll).filter(HangoutPoll.id == poll_id, HangoutPoll.group_id == group_id).first()
+    poll = db.query(HangoutPoll).filter(
+        HangoutPoll.id == poll_id,
+        HangoutPoll.group_id == group_id,
+        HangoutPoll.is_deleted == False
+    ).first()
     if not poll:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hangout poll not found.")
 
@@ -969,7 +1012,6 @@ async def add_poll_option(
         "type": "POLL_UPDATED",
         "poll": poll_resp.model_dump(mode="json"),
     })
-
     return poll_resp
 
 
@@ -988,21 +1030,23 @@ async def delete_poll_option(
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
-
     if group.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the group leader can manage poll options.",
         )
 
-    poll = db.query(HangoutPoll).filter(HangoutPoll.id == poll_id, HangoutPoll.group_id == group_id).first()
+    poll = db.query(HangoutPoll).filter(
+        HangoutPoll.id == poll_id,
+        HangoutPoll.group_id == group_id,
+        HangoutPoll.is_deleted == False
+    ).first()
     if not poll:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hangout poll not found.")
 
     option = db.query(PollOption).filter(PollOption.id == option_id, PollOption.poll_id == poll_id).first()
     if not option:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Option not found.")
-
     if option.is_default:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1018,7 +1062,6 @@ async def delete_poll_option(
         "type": "POLL_UPDATED",
         "poll": poll_resp.model_dump(mode="json"),
     })
-
     return poll_resp
 
 
@@ -1059,8 +1102,6 @@ async def websocket_group(websocket: WebSocket, group_id: int, token: Optional[s
         ws_manager.disconnect(group_id, websocket)
     except Exception:
         ws_manager.disconnect(group_id, websocket)
-
-
 
 
 @app.get(
@@ -1107,7 +1148,6 @@ def get_group_members(
                 availabilities=[AvailabilityResponse.model_validate(s) for s in slots],
             )
         )
-
     return response
 
 
@@ -1125,7 +1165,6 @@ def add_group_member(
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
-
     if group.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the group owner can add members.")
 
@@ -1149,7 +1188,6 @@ def add_group_member(
     new_mem = GroupMember(group_id=group_id, user_id=target_user.id, role="member")
     db.add(new_mem)
     db.commit()
-
     return MessageResponse(message=f"Added @{target_user.username} to {group.name} successfully.")
 
 
@@ -1167,10 +1205,8 @@ def remove_group_member(
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
-
     if group.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the owner can remove members.")
-
     if user_id == group.owner_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The owner cannot be removed from the group.")
 
@@ -1184,7 +1220,6 @@ def remove_group_member(
 
     db.delete(membership)
     db.commit()
-
     return MessageResponse(message="Member removed from group successfully.")
 
 
@@ -1278,8 +1313,18 @@ def update_profile(
         current_user.username = user_update.username
 
     if user_update.full_name is not None:
-        current_user.full_name = user_update.full_name
+        current_user.full_name = user_update.full_name.strip() if user_update.full_name else None
 
+    if user_update.street_address is not None:
+        current_user.street_address = user_update.street_address.strip() if user_update.street_address else None
+
+    if user_update.state is not None:
+        current_user.state = user_update.state.strip().upper() if user_update.state else None
+
+    if user_update.zip_code is not None:
+        current_user.zip_code = user_update.zip_code.strip() if user_update.zip_code else None
+
+    db.add(current_user)
     db.commit()
     db.refresh(current_user)
     return current_user
@@ -1315,7 +1360,6 @@ def upload_avatar(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid image format. Allowed formats: JPEG, PNG, WEBP, GIF.",
         )
-
     ext = Path(file.filename or "").suffix.lower()
     if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
         ext = ".png"
@@ -1331,32 +1375,33 @@ def upload_avatar(
     db.refresh(current_user)
     return current_user
 
+
 @app.put("/api/groups/{group_id}/photo", response_model=GroupResponse)
 async def upload_group_photo(
     group_id: int,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     group = db.query(Group).filter(Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-    
-    # Save the file following your app's existing upload structure
+
     ext = Path(file.filename or "").suffix.lower()
     if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
         ext = ".png"
-        
+
     unique_filename = f"group_{group_id}_{uuid.uuid4().hex[:8]}{ext}"
     dest_path = UPLOAD_DIR / unique_filename
-    
+
     with dest_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    
+
     group.group_photo_url = f"/media/uploads/{unique_filename}"
     db.commit()
     db.refresh(group)
     return group
+
 
 # --- Availability Endpoints ---
 @app.get(
@@ -1441,6 +1486,7 @@ if FRONTEND_DIR.exists():
 
 app.mount("/media/avatars", StaticFiles(directory=str(UPLOAD_DIR)), name="avatars")
 app.mount("/media/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads_media")
+
 
 @app.get("/", include_in_schema=False)
 @app.get("/reset-password", include_in_schema=False)
