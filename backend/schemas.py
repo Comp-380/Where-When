@@ -53,6 +53,9 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=100)
     username: Optional[str] = Field(None, min_length=3, max_length=30)
+    street_address: Optional[str] = Field(None, max_length=255)
+    state: Optional[str] = Field(None, max_length=2)
+    zip_code: Optional[str] = Field(None, max_length=10)
 
 
 class UserLogin(BaseModel):
@@ -65,10 +68,14 @@ class UserResponse(BaseModel):
     username: str
     email: str
     full_name: Optional[str] = None
+    street_address: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
     avatar_url: Optional[str] = None
     is_active: bool
     is_verified: bool
     created_at: datetime
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -129,6 +136,7 @@ class AvailabilityResponse(BaseModel):
     end_time: TimeType
     title: str
     created_at: datetime
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -170,6 +178,7 @@ class GroupMemberResponse(BaseModel):
     role: str
     joined_at: datetime
     availabilities: List[AvailabilityResponse] = []
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -182,6 +191,7 @@ class GroupResponse(BaseModel):
     invite_code: str
     member_count: int = 1
     created_at: datetime
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -191,6 +201,7 @@ class GroupPollOptionResponse(BaseModel):
     text: str
     is_default: bool
     created_at: datetime
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -218,6 +229,7 @@ class PollOptionResponse(BaseModel):
     count: int = 0
     percentage: float = 0.0
     voters: List[str] = []
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -232,6 +244,7 @@ class HangoutPollResponse(BaseModel):
     my_vote_option_id: Optional[int] = None
     options: List[PollOptionResponse] = []
     created_at: datetime
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -244,6 +257,7 @@ class CommonAvailabilitySlot(BaseModel):
     is_everyone: bool
     available_users: List[str]
     poll: Optional[HangoutPollResponse] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -255,5 +269,5 @@ class GroupAvailabilityResponse(BaseModel):
     shared_slots: List[CommonAvailabilitySlot]
     partial_slots: List[CommonAvailabilitySlot] = []
     polls: List[HangoutPollResponse] = []
-    model_config = ConfigDict(from_attributes=True)
 
+    model_config = ConfigDict(from_attributes=True)

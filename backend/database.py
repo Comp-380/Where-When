@@ -10,19 +10,19 @@ engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False}
 )
-
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 Base = declarative_base()
 
 
 def initialize_database(db_engine=engine):
-    """Create tables and upgrade databases created before avatar/profile/group invite support."""
+    """Create tables and upgrade databases created before address/group invite/poll deletion support."""
     from backend import models  # Register models before creating tables
     Base.metadata.create_all(bind=db_engine)
-    
+
     inspector = inspect(db_engine)
     tables = inspector.get_table_names()
-
+    
     if "users" in tables:
         columns = {column["name"] for column in inspector.get_columns("users")}
         profile_columns = {
@@ -32,6 +32,9 @@ def initialize_database(db_engine=engine):
             "general_location": "VARCHAR(100)",
             "activity_interests": "VARCHAR(255)",
             "bio": "VARCHAR(500)",
+            "street_address": "VARCHAR(255)",
+            "state": "VARCHAR(2)",
+            "zip_code": "VARCHAR(10)",
         }
         with db_engine.begin() as connection:
             for col_name, col_type in profile_columns.items():
@@ -47,7 +50,6 @@ def initialize_database(db_engine=engine):
             with db_engine.begin() as connection:
                 connection.execute(text("ALTER TABLE groups ADD COLUMN group_photo_url VARCHAR(255)"))
 
-        # Backfill existing groups that lack an invite code
         SessionClass = sessionmaker(bind=db_engine)
         with SessionClass() as session:
             try:
@@ -59,6 +61,12 @@ def initialize_database(db_engine=engine):
                 session.commit()
             except Exception:
                 session.rollback()
+
+    if "hangout_polls" in tables:
+        poll_columns = {column["name"] for column in inspector.get_columns("hangout_polls")}
+        if "is_deleted" not in poll_columns:
+            with db_engine.begin() as connection:
+                connection.execute(text("ALTER TABLE hangout_polls ADD COLUMN is_deleted BOOLEAN DEFAULT 0"))
 
 
 def get_db():

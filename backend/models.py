@@ -38,6 +38,9 @@ class User(Base):
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
     full_name = Column(String(100), nullable=True)
+    street_address = Column(String(255), nullable=True)
+    state = Column(String(2), nullable=True)
+    zip_code = Column(String(10), nullable=True)
     avatar_url = Column(String(255), nullable=True)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -45,7 +48,7 @@ class User(Base):
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
-        nullable=False
+        nullable=False,
     )
 
     availabilities = relationship("Availability", back_populates="user", cascade="all, delete-orphan")
@@ -67,7 +70,7 @@ class Availability(Base):
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
-        nullable=False
+        nullable=False,
     )
 
     user = relationship("User", back_populates="availabilities")
@@ -110,7 +113,6 @@ class GroupPollOption(Base):
     group = relationship("Group", back_populates="group_poll_options")
 
 
-
 class HangoutPoll(Base):
     __tablename__ = "hangout_polls"
 
@@ -120,6 +122,7 @@ class HangoutPoll(Base):
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
     place = Column(String(100), default="Dinner at a restaurant", nullable=False)
+    is_deleted = Column(Boolean, default=False, nullable=False)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -168,4 +171,3 @@ class PollVote(Base):
     poll = relationship("HangoutPoll", back_populates="votes")
     option = relationship("PollOption", back_populates="votes")
     user = relationship("User")
-

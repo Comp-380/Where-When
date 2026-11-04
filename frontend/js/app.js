@@ -7,7 +7,10 @@ const state = {
   userAvailabilities: [],
   userGroups: [],
   selectedGroup: null,
+  currentGroupData: null,
+  selectedMemberIds: new Set(),
   currentGroupPolls: {},
+  currentGroupPollOptions: [],
 };
 
 // DOM Elements
@@ -93,6 +96,9 @@ const dashId = document.getElementById("dash-id");
 const dashUsername = document.getElementById("dash-username");
 const dashEmail = document.getElementById("dash-email");
 const dashFullname = document.getElementById("dash-fullname");
+const dashStreet = document.getElementById("dash-street");
+const dashState = document.getElementById("dash-state");
+const dashZip = document.getElementById("dash-zip");
 const dashJoined = document.getElementById("dash-joined");
 const btnLogout = document.getElementById("btn-logout");
 const toastContainer = document.getElementById("toast-container");
@@ -134,7 +140,6 @@ const availGroupDesc = document.getElementById("avail-group-desc");
 const availGroupRoleBadge = document.getElementById("avail-group-role-badge");
 const btnAvailGoToGroups = document.getElementById("btn-avail-go-to-groups");
 const btnAvailManageGroup = document.getElementById("btn-avail-manage-group");
-
 const availTabShared = document.getElementById("avail-tab-shared");
 const availTabMembers = document.getElementById("avail-tab-members");
 const availSharedCountBadge = document.getElementById("avail-shared-count-badge");
@@ -167,13 +172,15 @@ const modalDeleteGroupSection = document.getElementById("modal-delete-group-sect
 const btnDeleteGroup = document.getElementById("btn-delete-group");
 const btnLeaveGroup = document.getElementById("btn-leave-group");
 
-
 // Edit Profile Elements
 const btnToggleEditProfile = document.getElementById("btn-toggle-edit-profile");
 const editProfileForm = document.getElementById("edit-profile-form");
 const btnCancelEdit = document.getElementById("btn-cancel-edit");
 const editFullname = document.getElementById("edit-fullname");
 const editUsername = document.getElementById("edit-username");
+const editStreet = document.getElementById("edit-street");
+const editState = document.getElementById("edit-state");
+const editZip = document.getElementById("edit-zip");
 const btnDeleteAccount = document.getElementById("btn-delete-account");
 
 // Toast Notification Utility
@@ -183,7 +190,6 @@ function showToast(message, type = "info", duration = 4000) {
   toast.className = `toast ${type}`;
   toast.textContent = message;
   toastContainer.appendChild(toast);
-
   setTimeout(() => {
     toast.style.opacity = "0";
     toast.style.transform = "translateX(40px)";
@@ -384,6 +390,7 @@ function evaluatePassword(pwd) {
     passwordStrengthText.textContent = label;
     passwordStrengthText.style.color = color;
   }
+
   return passedCount === 5;
 }
 
@@ -614,7 +621,6 @@ if (forgotForm) {
       fpEmail.focus();
       return;
     }
-
     setButtonLoading(btnForgot, true);
     try {
       const response = await fetch("/api/auth/forgot-password", {
@@ -622,12 +628,10 @@ if (forgotForm) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.detail || "Failed to request password reset.");
       }
-
       showToast(
         data.message || "If an account with this email exists, a password reset link has been sent.",
         "success",
@@ -694,6 +698,7 @@ function evaluateResetPassword(pwd) {
     rpPasswordStrengthText.textContent = label;
     rpPasswordStrengthText.style.color = color;
   }
+
   return passedCount === 5;
 }
 
@@ -702,7 +707,7 @@ function checkResetPasswordMatch() {
   const confirm = rpConfirmPassword.value;
   if (!confirm) {
     rpConfirmMatchHint.textContent = "";
-    rpConfirmMatchHint.className = "field-hint";
+    confirmMatchHint.className = "field-hint";
     rpConfirmPassword.classList.remove("valid-input", "invalid-input");
     return false;
   }
@@ -795,6 +800,7 @@ function handleAuthSuccess(authData) {
   renderDashboard(authData.user);
   loadAvailabilities();
   loadUserGroups();
+
   if (sessionStorage.getItem("pending_join_code")) {
     handlePendingJoinCode();
   } else {
@@ -802,7 +808,7 @@ function handleAuthSuccess(authData) {
   }
 }
 
-// Dashboard Rendering
+// Dashboard Rendering (Ensures all elements update immediately)
 function renderDashboard(user) {
   authSection.classList.add("hidden");
   dashboardSection.classList.remove("hidden");
@@ -824,6 +830,16 @@ function renderDashboard(user) {
   dashUsername.textContent = user.username;
   dashEmail.textContent = user.email;
   dashFullname.textContent = user.full_name || "Not provided";
+
+if (dashStreet) {
+    dashStreet.textContent = user.street_address ? user.street_address : "Not provided";
+  }
+  if (dashState) {
+    dashState.textContent = user.state ? user.state : "Not provided";
+  }
+  if (dashZip) {
+    dashZip.textContent = user.zip_code ? user.zip_code : "Not provided";
+  }
 
   const dateObj = new Date(user.created_at);
   dashJoined.textContent = dateObj.toLocaleDateString("en-US", {
@@ -863,7 +879,7 @@ function setButtonLoading(button, isLoading) {
   }
 }
 
-// Helper: HTML escaping
+// Helper: HTML Escaping
 function escapeHtml(str) {
   if (!str) return "";
   return str
@@ -903,6 +919,7 @@ async function checkPasswordResetParam() {
   const resetToken =
     params.get("reset_token") ||
     (window.location.pathname.includes("reset-password") ? params.get("token") : null);
+
   if (!resetToken) return;
 
   try {
@@ -953,7 +970,6 @@ async function checkExistingSession() {
       checkJoinGroupParam();
     }
   } catch (e) {
-    // Session load failure fallback
     checkJoinGroupParam();
   }
 }
@@ -962,16 +978,13 @@ if (avatarInput) {
   avatarInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     if (file.size > 5 * 1024 * 1024) {
       showToast("Image must be smaller than 5MB", "error");
       avatarInput.value = "";
       return;
     }
-
     const formData = new FormData();
     formData.append("file", file);
-
     try {
       showToast("Uploading avatar...", "info", 2000);
       const res = await fetch("/api/users/me/avatar", {
@@ -981,12 +994,10 @@ if (avatarInput) {
         },
         body: formData,
       });
-
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.detail || "Failed to upload avatar");
       }
-
       state.currentUser = data;
       renderDashboard(data);
       showToast("Profile picture updated!", "success");
@@ -1042,11 +1053,9 @@ function renderCalendar() {
     cell.textContent = day;
 
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-
     if (state.userAvailabilities.some((a) => a.date === dateStr)) {
       cell.classList.add("has-slots");
     }
-
     if (state.selectedDateStr === dateStr) {
       cell.classList.add("selected");
     }
@@ -1072,6 +1081,7 @@ function selectCalendarDate(dateStr) {
     day: "numeric",
     year: "numeric",
   })}`;
+
   renderSlotsForDate(dateStr);
 }
 
@@ -1081,7 +1091,6 @@ function renderSlotsForDate(dateStr) {
     dateSlotsList.innerHTML = `<p class="cal-empty-slots">No slots scheduled for this day.</p>`;
     return;
   }
-
   dateSlotsList.innerHTML = slots
     .map(
       (s) => `
@@ -1141,7 +1150,6 @@ if (availabilityForm) {
           title: titleVal,
         }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to add slot");
       showToast("Slot added!", "success");
@@ -1175,6 +1183,9 @@ if (btnToggleEditProfile) {
     if (state.currentUser) {
       editFullname.value = state.currentUser.full_name || "";
       editUsername.value = state.currentUser.username || "";
+      if (editStreet) editStreet.value = state.currentUser.street_address || "";
+      if (editState) editState.value = state.currentUser.state || "";
+      if (editZip) editZip.value = state.currentUser.zip_code || "";
       editProfileForm.classList.toggle("hidden");
     }
   });
@@ -1190,16 +1201,21 @@ if (editProfileForm) {
   editProfileForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        full_name: editFullname.value.trim(),
+        username: editUsername.value.trim(),
+        street_address: editStreet && editStreet.value.trim() ? editStreet.value.trim() : null,
+        state: editState && editState.value.trim() ? editState.value.trim().toUpperCase() : null,
+        zip_code: editZip && editZip.value.trim() ? editZip.value.trim() : null,
+      };
+
       const res = await fetch("/api/users/me", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${state.token}`,
         },
-        body: JSON.stringify({
-          full_name: editFullname.value.trim(),
-          username: editUsername.value.trim(),
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -1207,6 +1223,7 @@ if (editProfileForm) {
 
       state.currentUser = data;
       renderDashboard(data);
+
       editProfileForm.classList.add("hidden");
       showToast("Profile updated successfully!", "success");
     } catch (err) {
@@ -1219,7 +1236,6 @@ if (btnDeleteAccount) {
   btnDeleteAccount.addEventListener("click", async () => {
     const confirmed = confirm("Are you sure you want to permanently delete your account?");
     if (!confirmed) return;
-
     try {
       const res = await fetch("/api/users/me", {
         method: "DELETE",
@@ -1262,9 +1278,7 @@ function checkJoinGroupParam() {
   const params = new URLSearchParams(window.location.search);
   const joinCode = params.get("join");
   if (!joinCode) return;
-
   const code = joinCode.trim().toUpperCase();
-
   if (state.token && state.currentUser) {
     if (joinInviteCodeInput) {
       joinInviteCodeInput.value = code;
@@ -1318,14 +1332,13 @@ function renderUserGroups() {
     groupsListContainer.innerHTML = `<p class="cal-empty-slots">You have not joined or created any groups yet.</p>`;
     return;
   }
-
   groupsListContainer.innerHTML = state.userGroups
     .map((g) => {
       const isOwner = state.currentUser && g.owner_id === state.currentUser.id;
       return `
-    <div class="slot-item group-clickable-card" onclick="openGroupDetail(${g.id})" style="display: flex; align-items: center; gap: 1rem;">
-        ${g.group_photo_url ? `<img src="${g.group_photo_url}" style="width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" />` : ''}
-        <div style="flex: 1; min-width: 0;">
+        <div class="slot-item group-clickable-card" onclick="openGroupDetail(${g.id})" style="display: flex; align-items: center; gap: 1rem;">
+          ${g.group_photo_url ? `<img src="${g.group_photo_url}" style="width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" />` : ''}
+          <div style="flex: 1; min-width: 0;">
             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
               <strong style="font-size: 0.95rem; color: var(--accent);">${escapeHtml(g.name)}</strong>
               ${g.invite_code ? `<span class="badge" style="background: rgba(255, 255, 255, 0.08); font-family: monospace; font-size: 0.7rem; letter-spacing: 0.5px;">Code: ${escapeHtml(g.invite_code)}</span>` : ""}
@@ -1340,13 +1353,13 @@ function renderUserGroups() {
               ${isOwner ? "Owner" : "Member"}
             </span>
             <button type="button" class="btn-secondary" onclick="openGroupDetail(${g.id})" style="padding: 0.3rem 0.65rem; font-size: 0.74rem; width: auto; cursor: pointer;" title="Manage members and invite code">
-              ⚙ Manage
+              Manage
             </button>
             <button type="button" class="btn-primary" onclick="openGroupAvailability(${g.id})" style="padding: 0.3rem 0.65rem; font-size: 0.74rem; width: auto; cursor: pointer;" title="View group availability on calendar">
               Availability &rarr;
             </button>
             ${!isOwner ? `
-              <button type="button" class="btn-secondary" onclick="leaveGroup(${g.id}, '${escapeHtml(g.name).replace(/'/g, "\'")}')" style="padding: 0.25rem 0.55rem; font-size: 0.72rem; color: #f87171; border-color: rgba(248, 113, 113, 0.3); cursor: pointer;" title="Leave this group">
+              <button type="button" class="btn-secondary" onclick="leaveGroup(${g.id}, '${escapeHtml(g.name).replace(/'/g, "\\'")}')" style="padding: 0.25rem 0.55rem; font-size: 0.72rem; color: #f87171; border-color: rgba(248, 113, 113, 0.3); cursor: pointer;" title="Leave this group">
                 Leave
               </button>
             ` : ""}
@@ -1412,10 +1425,8 @@ function computeMutualIntervalsClient(userIntervalsMap, totalMembersCount) {
   if (!userIntervalsMap || totalMembersCount <= 0) {
     return { shared: [], partial: [] };
   }
-
   const normalized = {};
   const boundariesSet = new Set();
-
   for (const [userId, intervals] of Object.entries(userIntervalsMap)) {
     const merged = mergeIntervalList(intervals);
     normalized[userId] = merged;
@@ -1426,7 +1437,6 @@ function computeMutualIntervalsClient(userIntervalsMap, totalMembersCount) {
   }
 
   if (boundariesSet.size === 0) return { shared: [], partial: [] };
-
   const boundaries = Array.from(boundariesSet).sort((a, b) => a - b);
   const rawSegments = [];
 
@@ -1473,7 +1483,6 @@ function computeMutualIntervalsClient(userIntervalsMap, totalMembersCount) {
   const everyoneSegments = collapseSegments(
     rawSegments.filter((s) => s.count === totalMembersCount)
   );
-
   const minCount = totalMembersCount > 1 ? 2 : 1;
   const partialSegments = collapseSegments(
     rawSegments.filter((s) => s.count >= minCount && s.count < totalMembersCount)
@@ -1490,7 +1499,6 @@ if (availTabShared && availTabMembers) {
     if (availPanelShared) availPanelShared.classList.remove("hidden");
     if (availPanelMembers) availPanelMembers.classList.add("hidden");
   });
-
   availTabMembers.addEventListener("click", () => {
     availTabMembers.classList.add("active");
     availTabShared.classList.remove("active");
@@ -1529,7 +1537,6 @@ function updateAvailGroupSection() {
 
   availGroupSelect.disabled = false;
   const currentVal = state.selectedGroup ? state.selectedGroup.id : null;
-
   availGroupSelect.innerHTML = state.userGroups
     .map((g) => `<option value="${g.id}">${escapeHtml(g.name)} (${g.member_count} member${g.member_count > 1 ? "s" : ""})</option>`)
     .join("");
@@ -1547,7 +1554,6 @@ function updateAvailGroupSection() {
 function selectGroupInAvailability(groupId, shouldScroll = false) {
   const group = state.userGroups.find((g) => g.id === groupId);
   if (!group) return;
-
   state.selectedGroup = group;
   if (availGroupSelect) availGroupSelect.value = String(groupId);
 
@@ -1574,7 +1580,6 @@ function selectGroupInAvailability(groupId, shouldScroll = false) {
   }
 
   loadGroupAvailability(groupId);
-
   if (shouldScroll && groupAvailabilitySection) {
     groupAvailabilitySection.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -1599,19 +1604,17 @@ if (btnAvailGoToGroups) {
   });
 }
 
-// Open group availability in Availability Tab
 window.openGroupAvailability = function (groupId) {
   if (groupDetailModal) groupDetailModal.classList.add("hidden");
   switchDashboardTab("panel-availability");
   selectGroupInAvailability(groupId, true);
 };
 
-// Open group detail & management modal in Groups Tab
 window.openGroupDetail = async function (groupId) {
   const group = state.userGroups.find((g) => g.id === groupId);
   if (!group) return;
-
   state.selectedGroup = group;
+
   if (modalGroupName) modalGroupName.textContent = group.name;
   if (modalGroupDesc) modalGroupDesc.textContent = group.description || "No description provided.";
   if (modalGroupInviteCode) {
@@ -1624,7 +1627,6 @@ window.openGroupDetail = async function (groupId) {
     modalGroupRoleBadge.className = isOwner ? "badge badge-success" : "badge";
   }
 
-  // Show Add Member, Add Option & Delete Group sections only if current user is owner
   const groupOwnerAddPollOptionSection = document.getElementById("group-owner-add-poll-option-section");
   if (isOwner) {
     if (groupOwnerAddMemberSection) groupOwnerAddMemberSection.classList.remove("hidden");
@@ -1643,29 +1645,23 @@ window.openGroupDetail = async function (groupId) {
   await loadGroupPollOptions(groupId);
 };
 
-// Load member list for group management modal
 async function loadGroupMembersForManage(groupId) {
   if (!groupManageMembersList) return;
   groupManageMembersList.innerHTML = `<p class="cal-empty-slots">Loading members...</p>`;
-
   try {
     const res = await fetch(`/api/groups/${groupId}/availability`, {
       headers: { Authorization: `Bearer ${state.token}` },
     });
     if (!res.ok) throw new Error("Failed to load group members.");
     const data = await res.json();
-
     if (modalMembersCount) {
       modalMembersCount.textContent = `${data.members.length} member${data.members.length > 1 ? "s" : ""}`;
     }
-
     const isOwner = state.currentUser && state.selectedGroup && state.selectedGroup.owner_id === state.currentUser.id;
-
     if (!data.members || data.members.length === 0) {
       groupManageMembersList.innerHTML = `<p class="cal-empty-slots">No members found.</p>`;
       return;
     }
-
     groupManageMembersList.innerHTML = data.members
       .map((m) => {
         const isMe = state.currentUser && state.currentUser.id === m.user_id;
@@ -1673,7 +1669,6 @@ async function loadGroupMembersForManage(groupId) {
         const removeBtn = canRemove
           ? `<button type="button" class="btn-del-slot" onclick="removeMember(${m.user_id})" title="Remove member" style="color: #f87171; font-size: 1.1rem; cursor: pointer;">&times;</button>`
           : "";
-
         return `
           <div class="member-card" style="margin-bottom: 0.5rem; padding: 0.65rem 0.85rem;">
             <div class="member-card-header" style="margin-bottom: 0;">
@@ -1699,12 +1694,10 @@ async function loadGroupMembersForManage(groupId) {
   }
 }
 
-// Load poll options for group management in Groups tab
 async function loadGroupPollOptions(groupId) {
   const container = document.getElementById("group-poll-options-list");
   if (!container) return;
   container.innerHTML = `<span style="font-size: 0.75rem; color: var(--text-muted);">Loading options...</span>`;
-
   try {
     const res = await fetch(`/api/groups/${groupId}/poll-options`, {
       headers: { Authorization: `Bearer ${state.token}` },
@@ -1712,18 +1705,15 @@ async function loadGroupPollOptions(groupId) {
     if (!res.ok) throw new Error("Failed to load group poll options.");
     const options = await res.json();
     state.currentGroupPollOptions = options;
-
     const isOwner = Boolean(
       state.currentUser &&
       state.selectedGroup &&
       state.selectedGroup.owner_id === state.currentUser.id
     );
-
     if (!options || options.length === 0) {
       container.innerHTML = `<span style="font-size: 0.75rem; color: var(--text-muted);">No options configured.</span>`;
       return;
     }
-
     container.innerHTML = options
       .map((opt) => {
         const isDefault = opt.is_default;
@@ -1748,7 +1738,6 @@ window.deleteGroupPollOption = async function (groupId, optionId) {
   if (!confirm("Remove this option from all current and future group polls?")) {
     return;
   }
-
   try {
     const res = await fetch(`/api/groups/${groupId}/poll-options/${optionId}`, {
       method: "DELETE",
@@ -1771,7 +1760,6 @@ window.deleteGroupPollOption = async function (groupId, optionId) {
 };
 
 // ==================== REAL-TIME HANGOUT POLLS & VOTING ====================
-
 let groupWebSocket = null;
 
 function connectGroupWebSocket(groupId) {
@@ -1788,12 +1776,21 @@ function connectGroupWebSocket(groupId) {
 
   try {
     groupWebSocket = new WebSocket(wsUrl);
-
     groupWebSocket.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === "POLL_UPDATED" && msg.poll) {
           updatePollCardDOM(msg.poll);
+        } else if (msg.type === "POLL_DELETED" && msg.poll_id) {
+          delete state.currentGroupPolls[msg.poll_id];
+          if (msg.date && msg.start_time && msg.end_time) {
+            const key = `${msg.date}_${msg.start_time.slice(0, 5)}_${msg.end_time.slice(0, 5)}`;
+            delete state.currentGroupPolls[key];
+          }
+          const pollSection = document.getElementById(`poll-section-${msg.poll_id}`);
+          if (pollSection) pollSection.remove();
+          renderGroupSharedSlots();
+          showToast("A hangout poll was removed.", "info");
         } else if (msg.type === "GROUP_OPTIONS_UPDATED") {
           if (state.selectedGroup && state.selectedGroup.id === msg.group_id) {
             loadGroupPollOptions(msg.group_id);
@@ -1804,11 +1801,9 @@ function connectGroupWebSocket(groupId) {
         console.warn("WebSocket parse error:", err);
       }
     };
-
     groupWebSocket.onclose = () => {
       groupWebSocket = null;
     };
-
     groupWebSocket.onerror = (err) => {
       console.warn("WebSocket error:", err);
     };
@@ -1827,10 +1822,9 @@ function disconnectGroupWebSocket() {
 }
 
 function renderPollHtml(poll, isLeader, groupId) {
-  if (!poll) return "";
+  if (!poll || poll.is_deleted) return "";
   const totalVotes = poll.total_votes || 0;
 
-  // Progress bar segments
   const progressBars = (poll.options || []).map((opt) => {
     let color = "#6366f1";
     if (opt.text.toLowerCase() === "yes") color = "#10b981";
@@ -1838,7 +1832,6 @@ function renderPollHtml(poll, isLeader, groupId) {
     return `<div class="poll-progress-segment" style="width: ${opt.percentage}%; background: ${color};" title="${escapeHtml(opt.text)}: ${opt.count} (${opt.percentage}%)"></div>`;
   }).join("");
 
-  // Option buttons
   const optionsHtml = (poll.options || []).map((opt) => {
     const isVoted = poll.my_vote_option_id === opt.id;
     const textLower = opt.text.toLowerCase();
@@ -1846,7 +1839,6 @@ function renderPollHtml(poll, isLeader, groupId) {
     if (textLower === "yes") optClass += " opt-yes";
     if (textLower === "no") optClass += " opt-no";
     if (isVoted) optClass += " active";
-
     return `
       <button type="button" class="${optClass}" onclick="castHangoutVote(${groupId}, ${poll.id}, ${opt.id})" title="${opt.voters && opt.voters.length ? `Voters: @${opt.voters.join(', @')}` : 'No votes yet'}">
         <span>${textLower === "yes" ? "👍 " : (textLower === "no" ? "👎 " : "")}${escapeHtml(opt.text)}</span>
@@ -1855,11 +1847,18 @@ function renderPollHtml(poll, isLeader, groupId) {
     `;
   }).join("");
 
+  const deletePollBtn = isLeader
+    ? `<button type="button" class="btn-del-poll" onclick="deleteHangoutPoll(${groupId}, ${poll.id}, '${poll.date}', '${poll.start_time}', '${poll.end_time}')" title="Delete Poll">Delete Poll</button>`
+    : "";
+
   return `
     <div class="poll-section" id="poll-section-${poll.id}">
       <div class="poll-header">
-        <span class="hangout-place-badge">🍽️ Place: ${escapeHtml(poll.place || "Dinner at a restaurant")}</span>
-        <span style="font-size: 0.74rem;">${totalVotes} vote${totalVotes === 1 ? "" : "s"} total</span>
+        <span class="hangout-place-badge">📍 Place: ${escapeHtml(poll.place || "Dinner at a restaurant")}</span>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-size: 0.74rem;">${totalVotes} vote${totalVotes === 1 ? "" : "s"} total</span>
+          ${deletePollBtn}
+        </div>
       </div>
       <div class="poll-progress-container">
         ${totalVotes > 0 ? progressBars : `<div class="poll-progress-segment" style="width: 100%; background: rgba(255,255,255,0.06);"></div>`}
@@ -1872,21 +1871,59 @@ function renderPollHtml(poll, isLeader, groupId) {
 }
 
 function updatePollCardDOM(poll) {
-  if (!poll) return;
+  if (!poll || poll.is_deleted) return;
   state.currentGroupPolls[poll.id] = poll;
   const pollKey = `${poll.date}_${poll.start_time.slice(0, 5)}_${poll.end_time.slice(0, 5)}`;
   state.currentGroupPolls[pollKey] = poll;
 
   const pollSection = document.getElementById(`poll-section-${poll.id}`);
   if (pollSection) {
+    const isLeader = Boolean(
+      state.selectedGroup &&
+      state.currentUser &&
+      state.selectedGroup.owner_id === state.currentUser.id
+    );
     const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = renderPollHtml(poll, false, poll.group_id);
+    tempDiv.innerHTML = renderPollHtml(poll, isLeader, poll.group_id);
     const newSection = tempDiv.firstElementChild;
     if (newSection) {
       pollSection.replaceWith(newSection);
     }
   }
 }
+
+window.deleteHangoutPoll = async function (groupId, pollId, pDate, pStart, pEnd) {
+  if (!confirm("Are you sure you want to delete this poll? All recorded votes will be removed.")) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/groups/${groupId}/hangouts/${pollId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Failed to delete poll.");
+
+    showToast("Poll deleted successfully.", "info");
+
+    // Remove ID reference
+    delete state.currentGroupPolls[pollId];
+
+    // Remove Date_Start_End formatted reference
+    if (pDate && pStart && pEnd) {
+      const key5 = `${pDate}_${String(pStart).slice(0, 5)}_${String(pEnd).slice(0, 5)}`;
+      delete state.currentGroupPolls[key5];
+    }
+
+    // Immediately remove DOM element and trigger a clean re-render of shared slots
+    const pollSection = document.getElementById(`poll-section-${pollId}`);
+    if (pollSection) pollSection.remove();
+
+    renderGroupSharedSlots();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+};
 
 window.castHangoutVote = async function (groupId, pollId, optionId) {
   if (!state.token) return;
@@ -1912,6 +1949,7 @@ window.castHangoutVote = async function (groupId, pollId, optionId) {
 
 const groupAddPollOptionForm = document.getElementById("group-add-poll-option-form");
 const groupPollOptionInput = document.getElementById("group-poll-option-input");
+
 if (groupAddPollOptionForm) {
   groupAddPollOptionForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1972,19 +2010,18 @@ async function loadGroupAvailability(groupId) {
     });
     if (!res.ok) throw new Error("Failed to load group availability.");
     const data = await res.json();
-    state.currentGroupData = data;
 
+    state.currentGroupData = data;
     state.currentGroupPolls = {};
     if (data.polls && Array.isArray(data.polls)) {
       data.polls.forEach((p) => {
         state.currentGroupPolls[p.id] = p;
-        const key = `${p.date}_${p.start_time.slice(0, 5)}_${p.end_time.slice(0, 5)}`;
+        const key = `${p.date}_${String(p.start_time).slice(0, 5)}_${String(p.end_time).slice(0, 5)}`;
         state.currentGroupPolls[key] = p;
       });
     }
 
     state.selectedMemberIds = new Set(data.members.map((m) => m.user_id));
-
     if (availMembersCount) {
       availMembersCount.textContent = `${data.members.length} member${data.members.length > 1 ? "s" : ""}`;
     }
@@ -2001,7 +2038,6 @@ async function loadGroupAvailability(groupId) {
 function renderMemberFilterChips() {
   if (!availMemberFilterChips || !state.currentGroupData) return;
   const members = state.currentGroupData.members || [];
-
   availMemberFilterChips.innerHTML = members
     .map((m) => {
       const isSelected = state.selectedMemberIds.has(m.user_id);
@@ -2034,7 +2070,6 @@ window.toggleGroupMemberFilter = function (userId) {
 
 function renderGroupSharedSlots() {
   if (!availSharedSlotsContainer || !state.currentGroupData) return;
-
   const allMembers = state.currentGroupData.members || [];
   const selectedMembers = allMembers.filter((m) => state.selectedMemberIds.has(m.user_id));
   const totalSelected = selectedMembers.length;
@@ -2064,7 +2099,6 @@ function renderGroupSharedSlots() {
   sortedDates.forEach((d) => {
     const userIntervals = datesMap[d];
     const { shared, partial } = computeMutualIntervalsClient(userIntervals, totalSelected);
-
     shared.forEach((s) => {
       allSharedList.push({
         date: d,
@@ -2076,7 +2110,6 @@ function renderGroupSharedSlots() {
         is_everyone: true,
       });
     });
-
     partial.forEach((p) => {
       allPartialList.push({
         date: d,
@@ -2097,7 +2130,7 @@ function renderGroupSharedSlots() {
   if (allSharedList.length === 0 && allPartialList.length === 0) {
     availSharedSlotsContainer.innerHTML = `
       <div style="text-align: center; padding: 1.5rem 1rem;">
-        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">📅</div>
+        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">🏖️</div>
         <p style="color: var(--text-main); font-weight: 600; margin-bottom: 0.35rem;">No overlapping free times found</p>
         <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">
           The selected ${totalSelected} member${totalSelected > 1 ? "s" : ""} have no overlapping hours. Try unchecking busy members or ask members to add more open slots.
@@ -2108,16 +2141,14 @@ function renderGroupSharedSlots() {
   }
 
   let html = "";
-
   if (allSharedList.length > 0) {
     html += `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
         <span style="font-size: 0.78rem; font-weight: 700; color: #34d399; text-transform: uppercase; letter-spacing: 0.04em;">
-          ✓ Times When All ${totalSelected} Selected Members Are Free (${allSharedList.length})
+          Times When All ${totalSelected} Selected Members Are Free (${allSharedList.length})
         </span>
       </div>
     `;
-
     html += allSharedList
       .map((slot) => {
         const startTime12 = formatTime12h(slot.start_time);
@@ -2126,7 +2157,6 @@ function renderGroupSharedSlots() {
         const userTags = slot.users
           .map((u) => `<span class="avail-pill" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #34d399;">@${escapeHtml(u)}</span>`)
           .join("");
-
         const pollKey = `${slot.date}_${slot.start_time.slice(0, 5)}_${slot.end_time.slice(0, 5)}`;
         const poll = (state.currentGroupPolls && state.currentGroupPolls[pollKey]) || null;
         const isLeader = Boolean(
@@ -2135,11 +2165,10 @@ function renderGroupSharedSlots() {
           state.selectedGroup.owner_id === state.currentUser.id
         );
         const pollHtml = renderPollHtml(poll, isLeader, state.selectedGroup ? state.selectedGroup.id : null);
-
         return `
           <div class="shared-slot-card">
             <div class="shared-slot-header">
-              <span class="shared-date-pill">📅 ${escapeHtml(dateFormatted)}</span>
+              <span class="shared-date-pill">🗓️ ${escapeHtml(dateFormatted)}</span>
               <span class="badge-everyone">All ${slot.total} Free</span>
             </div>
             <div style="margin: 0.45rem 0;">
@@ -2169,7 +2198,6 @@ function renderGroupSharedSlots() {
         </span>
       </div>
     `;
-
     html += allPartialList
       .map((slot) => {
         const startTime12 = formatTime12h(slot.start_time);
@@ -2178,7 +2206,6 @@ function renderGroupSharedSlots() {
         const userTags = slot.users
           .map((u) => `<span class="avail-pill" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">@${escapeHtml(u)}</span>`)
           .join("");
-
         const pollKey = `${slot.date}_${slot.start_time.slice(0, 5)}_${slot.end_time.slice(0, 5)}`;
         const poll = (state.currentGroupPolls && state.currentGroupPolls[pollKey]) || null;
         const isLeader = Boolean(
@@ -2187,11 +2214,10 @@ function renderGroupSharedSlots() {
           state.selectedGroup.owner_id === state.currentUser.id
         );
         const pollHtml = renderPollHtml(poll, isLeader, state.selectedGroup ? state.selectedGroup.id : null);
-
         return `
           <div class="shared-slot-card partial">
             <div class="shared-slot-header">
-              <span class="shared-date-pill">📅 ${escapeHtml(dateFormatted)}</span>
+              <span class="shared-date-pill">🗓️ ${escapeHtml(dateFormatted)}</span>
               <span class="badge-partial">${slot.count} of ${slot.total} Free</span>
             </div>
             <div style="margin: 0.45rem 0;">
@@ -2222,7 +2248,6 @@ function renderGroupIndividualMembers(members) {
     availMembersList.innerHTML = `<p class="cal-empty-slots">No members found in this group.</p>`;
     return;
   }
-
   availMembersList.innerHTML = members
     .map((m) => {
       let availHtml = "";
@@ -2246,7 +2271,6 @@ function renderGroupIndividualMembers(members) {
       } else {
         availHtml = `<div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px; font-style: italic;">No availability registered yet.</div>`;
       }
-
       return `
         <div class="member-card">
           <div class="member-card-header">
@@ -2274,7 +2298,6 @@ window.removeMember = async function (userId) {
   if (!state.selectedGroup) return;
   const confirmed = confirm("Are you sure you want to remove this member from the group?");
   if (!confirmed) return;
-
   try {
     const res = await fetch(`/api/groups/${state.selectedGroup.id}/members/${userId}`, {
       method: "DELETE",
@@ -2282,7 +2305,6 @@ window.removeMember = async function (userId) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Failed to remove member.");
-
     showToast(data.message || "Member removed.", "info");
     await loadGroupMembersForManage(state.selectedGroup.id);
     await loadGroupAvailability(state.selectedGroup.id);
@@ -2305,7 +2327,6 @@ window.leaveGroup = async function (groupId, groupName) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Failed to leave group.");
-
     showToast(data.message || `Left "${name}" successfully.`, "info");
     if (state.selectedGroup && state.selectedGroup.id === groupId) {
       if (groupDetailModal) groupDetailModal.classList.add("hidden");
@@ -2322,7 +2343,6 @@ if (addMemberForm) {
   addMemberForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!state.selectedGroup) return;
-
     const identifier = addMemberIdentifier.value.trim();
     if (!identifier) return;
 
@@ -2338,7 +2358,6 @@ if (addMemberForm) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to add member.");
-
       showToast(data.message || "Member added!", "success");
       addMemberForm.reset();
       await loadGroupMembersForManage(state.selectedGroup.id);
@@ -2384,12 +2403,11 @@ if (btnLeaveGroup) {
   });
 }
 
-// SCRUM-43: Delete group logic (Owner only, in Groups Tab)
+// Delete group logic (Owner only, in Groups Tab)
 window.deleteGroup = async function (groupId, groupName) {
   const name = groupName || "this group";
   const confirmed = confirm(`Are you sure you want to permanently delete "${name}"? This action cannot be undone and will remove all group memberships.`);
   if (!confirmed) return;
-
   try {
     const res = await fetch(`/api/groups/${groupId}`, {
       method: "DELETE",
@@ -2397,23 +2415,18 @@ window.deleteGroup = async function (groupId, groupName) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Failed to delete group.");
-
     showToast(data.message || `Deleted "${name}" successfully.`, "info");
     
-    // Close modal and reset state
     if (groupDetailModal) groupDetailModal.classList.add("hidden");
     if (state.selectedGroup && state.selectedGroup.id === groupId) {
       state.selectedGroup = null;
     }
-
-    // Refresh user group lists and availability dropdowns
     await loadUserGroups();
   } catch (err) {
     showToast(err.message, "error");
   }
 };
 
-// Event listener for Delete Group button inside modal
 if (btnDeleteGroup) {
   btnDeleteGroup.addEventListener("click", async () => {
     if (!state.selectedGroup) return;
@@ -2455,21 +2468,21 @@ if (createGroupForm) {
         },
         body: JSON.stringify({ name, description }),
       });
-
       const data = await response.json();
-      const photoInput = document.getElementById("group-photo-input");
-if (response.ok && photoInput && photoInput.files[0]) {
-    const formData = new FormData();
-    formData.append("file", photoInput.files[0]);
 
-    await fetch(`/api/groups/${data.id}/photo`, {
-        method: "PUT",
-        headers: {
-            "Authorization": `Bearer ${state.token}`
-        },
-        body: formData
-    });
-}
+      const photoInput = document.getElementById("group-photo-input");
+      if (response.ok && photoInput && photoInput.files[0]) {
+        const formData = new FormData();
+        formData.append("file", photoInput.files[0]);
+        await fetch(`/api/groups/${data.id}/photo`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${state.token}`,
+          },
+          body: formData,
+        });
+      }
+
       if (!response.ok) {
         throw new Error(data.detail || "Failed to create group.");
       }
