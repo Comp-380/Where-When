@@ -99,6 +99,7 @@ const dashFullname = document.getElementById("dash-fullname");
 const dashStreet = document.getElementById("dash-street");
 const dashState = document.getElementById("dash-state");
 const dashZip = document.getElementById("dash-zip");
+const dashDistance = document.getElementById("dash-distance");
 const dashJoined = document.getElementById("dash-joined");
 const btnLogout = document.getElementById("btn-logout");
 const toastContainer = document.getElementById("toast-container");
@@ -181,6 +182,7 @@ const editUsername = document.getElementById("edit-username");
 const editStreet = document.getElementById("edit-street");
 const editState = document.getElementById("edit-state");
 const editZip = document.getElementById("edit-zip");
+const editDistance = document.getElementById("edit-distance");
 const btnDeleteAccount = document.getElementById("btn-delete-account");
 
 // Toast Notification Utility
@@ -204,7 +206,6 @@ function switchTab(target) {
   loginView?.classList.remove("active");
   if (forgotView) forgotView.classList.remove("active");
   if (resetView) resetView.classList.remove("active");
-
   tabSignupBtn?.classList.remove("active");
   tabSignupBtn?.setAttribute("aria-selected", "false");
   tabLoginBtn?.classList.remove("active");
@@ -282,7 +283,6 @@ document.querySelectorAll(".toggle-password").forEach((button) => {
     const input = document.getElementById(targetId);
     const eyeOpen = button.querySelector(".eye-open");
     const eyeClosed = button.querySelector(".eye-closed");
-
     if (input.type === "password") {
       input.type = "text";
       eyeOpen?.classList.add("hidden");
@@ -312,7 +312,7 @@ function validateUsername(value) {
   } else {
     suUsername.classList.add("invalid-input");
     suUsername.classList.remove("valid-input");
-    valIconUsername.textContent = "✗";
+    valIconUsername.textContent = "✕";
     valIconUsername.style.color = "#ef4444";
   }
   return valid;
@@ -335,7 +335,7 @@ function validateEmail(value) {
   } else {
     suEmail.classList.add("invalid-input");
     suEmail.classList.remove("valid-input");
-    valIconEmail.textContent = "✗";
+    valIconEmail.textContent = "✕";
     valIconEmail.style.color = "#ef4444";
   }
   return valid;
@@ -422,7 +422,7 @@ function checkPasswordMatch() {
     suConfirmPassword.classList.remove("invalid-input");
     return true;
   } else {
-    confirmMatchHint.textContent = "✗ Passwords do not match";
+    confirmMatchHint.textContent = "✕ Passwords do not match";
     confirmMatchHint.className = "field-hint error";
     suConfirmPassword.classList.add("invalid-input");
     suConfirmPassword.classList.remove("valid-input");
@@ -432,10 +432,11 @@ function checkPasswordMatch() {
 
 if (suUsername) suUsername.addEventListener("input", (e) => validateUsername(e.target.value));
 if (suEmail) suEmail.addEventListener("input", (e) => validateEmail(e.target.value));
-if (suPassword) suPassword.addEventListener("input", (e) => {
-  evaluatePassword(e.target.value);
-  if (suConfirmPassword?.value) checkPasswordMatch();
-});
+if (suPassword)
+  suPassword.addEventListener("input", (e) => {
+    evaluatePassword(e.target.value);
+    if (suConfirmPassword?.value) checkPasswordMatch();
+  });
 if (suConfirmPassword) suConfirmPassword.addEventListener("input", checkPasswordMatch);
 
 // Signup Form Submit Handler
@@ -486,7 +487,6 @@ if (signupForm) {
           confirm_password: confirmPassword,
         }),
       });
-
       const data = await response.json();
       if (!response.ok) {
         const errMsg = Array.isArray(data.detail)
@@ -494,7 +494,6 @@ if (signupForm) {
           : data.detail || "Registration failed.";
         throw new Error(errMsg);
       }
-
       showToast(data.message || "Account created! Check your email to verify before signing in.", "success", 7000);
       signupForm.reset();
       evaluatePassword("");
@@ -533,11 +532,9 @@ if (loginForm) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier, password }),
       });
-
       if (!(response.headers.get("content-type") || "").includes("application/json")) {
         throw new Error("The server could not process your login. Please try again shortly.");
       }
-
       const data = await response.json();
       if (!response.ok) {
         if (response.status === 403 && data.detail && data.detail.toLowerCase().includes("verify")) {
@@ -547,7 +544,6 @@ if (loginForm) {
         }
         throw new Error(data.detail || "Login failed.");
       }
-
       showToast("Signed in successfully!", "success");
       handleAuthSuccess(data);
       loginForm.reset();
@@ -601,7 +597,7 @@ function validateFpEmail(value) {
   } else {
     fpEmail.classList.add("invalid-input");
     fpEmail.classList.remove("valid-input");
-    valIconFpEmail.textContent = "✗";
+    valIconFpEmail.textContent = "✕";
     valIconFpEmail.style.color = "#ef4444";
   }
   return valid;
@@ -707,19 +703,18 @@ function checkResetPasswordMatch() {
   const confirm = rpConfirmPassword.value;
   if (!confirm) {
     rpConfirmMatchHint.textContent = "";
-    confirmMatchHint.className = "field-hint";
     rpConfirmPassword.classList.remove("valid-input", "invalid-input");
     return false;
   }
   if (pwd === confirm) {
     rpConfirmMatchHint.textContent = "✓ Passwords match";
-    confirmMatchHint.className = "field-hint success";
+    rpConfirmMatchHint.className = "field-hint success";
     rpConfirmPassword.classList.add("valid-input");
     rpConfirmPassword.classList.remove("invalid-input");
     return true;
   } else {
-    rpConfirmMatchHint.textContent = "✗ Passwords do not match";
-    confirmMatchHint.className = "field-hint error";
+    rpConfirmMatchHint.textContent = "✕ Passwords do not match";
+    rpConfirmMatchHint.className = "field-hint error";
     rpConfirmPassword.classList.add("invalid-input");
     rpConfirmPassword.classList.remove("valid-input");
     return false;
@@ -770,12 +765,10 @@ if (resetForm) {
           confirm_password: confirmPassword,
         }),
       });
-
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.detail || "Password reset failed.");
       }
-
       showToast(
         data.message || "Your password has been successfully reset! You can now log in.",
         "success",
@@ -831,7 +824,7 @@ function renderDashboard(user) {
   dashEmail.textContent = user.email;
   dashFullname.textContent = user.full_name || "Not provided";
 
-if (dashStreet) {
+  if (dashStreet) {
     dashStreet.textContent = user.street_address ? user.street_address : "Not provided";
   }
   if (dashState) {
@@ -839,6 +832,9 @@ if (dashStreet) {
   }
   if (dashZip) {
     dashZip.textContent = user.zip_code ? user.zip_code : "Not provided";
+  }
+  if (dashDistance) {
+    dashDistance.textContent = user.max_travel_distance ? `${user.max_travel_distance} miles` : "Not provided";
   }
 
   const dateObj = new Date(user.created_at);
@@ -896,7 +892,6 @@ async function checkEmailVerificationParam() {
   if (params.get("reset_token") || window.location.pathname.includes("reset-password")) return;
   const token = params.get("token");
   if (!token) return;
-
   try {
     const res = await fetch(`/api/auth/verify?token=${encodeURIComponent(token)}`);
     const data = await res.json();
@@ -921,7 +916,6 @@ async function checkPasswordResetParam() {
     (window.location.pathname.includes("reset-password") ? params.get("token") : null);
 
   if (!resetToken) return;
-
   try {
     const res = await fetch(`/api/auth/verify-reset-token?token=${encodeURIComponent(resetToken)}`);
     const data = await res.json();
@@ -1032,9 +1026,8 @@ function renderCalendar() {
   const month = state.currentCalDate.getMonth();
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+    "July", "August", "September", "October", "November", "December",
   ];
-
   if (calMonthYear) calMonthYear.textContent = `${monthNames[month]} ${year}`;
   calDaysGrid.innerHTML = "";
 
@@ -1051,7 +1044,6 @@ function renderCalendar() {
     const cell = document.createElement("div");
     cell.className = "cal-day-cell";
     cell.textContent = day;
-
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     if (state.userAvailabilities.some((a) => a.date === dateStr)) {
       cell.classList.add("has-slots");
@@ -1074,7 +1066,6 @@ function selectCalendarDate(dateStr) {
   state.selectedDateStr = dateStr;
   availDateInput.value = dateStr;
   availabilityForm.classList.remove("hidden");
-
   const [y, m, d] = dateStr.split("-");
   calSelectedDateText.textContent = `Slots for ${new Date(y, m - 1, d).toLocaleDateString("en-US", {
     month: "short",
@@ -1186,6 +1177,7 @@ if (btnToggleEditProfile) {
       if (editStreet) editStreet.value = state.currentUser.street_address || "";
       if (editState) editState.value = state.currentUser.state || "";
       if (editZip) editZip.value = state.currentUser.zip_code || "";
+      if (editDistance) editDistance.value = state.currentUser.max_travel_distance || "";
       editProfileForm.classList.toggle("hidden");
     }
   });
@@ -1207,8 +1199,8 @@ if (editProfileForm) {
         street_address: editStreet && editStreet.value.trim() ? editStreet.value.trim() : null,
         state: editState && editState.value.trim() ? editState.value.trim().toUpperCase() : null,
         zip_code: editZip && editZip.value.trim() ? editZip.value.trim() : null,
+        max_travel_distance: editDistance && editDistance.value.trim() ? parseInt(editDistance.value.trim(), 10) : null,
       };
-
       const res = await fetch("/api/users/me", {
         method: "PATCH",
         headers: {
@@ -1217,10 +1209,8 @@ if (editProfileForm) {
         },
         body: JSON.stringify(payload),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to update profile.");
-
       state.currentUser = data;
       renderDashboard(data);
 
@@ -1373,7 +1363,7 @@ function renderUserGroups() {
 // ==================== TIME & DATE FORMATTING UTILITIES ====================
 function formatTime12h(timeStr) {
   if (!timeStr) return "";
-  const parts = timeStr.split(":");
+  const parts = String(timeStr).split(":");
   let hour = parseInt(parts[0], 10);
   const minute = parts[1] || "00";
   const ampm = hour >= 12 ? "PM" : "AM";
@@ -1394,7 +1384,7 @@ function formatDatePretty(dateStr) {
 }
 
 function timeStrToMinutes(timeStr) {
-  const [h, m] = timeStr.split(":").map(Number);
+  const [h, m] = String(timeStr).split(":").map(Number);
   return h * 60 + m;
 }
 
@@ -1435,7 +1425,6 @@ function computeMutualIntervalsClient(userIntervalsMap, totalMembersCount) {
       boundariesSet.add(end);
     }
   }
-
   if (boundariesSet.size === 0) return { shared: [], partial: [] };
   const boundaries = Array.from(boundariesSet).sort((a, b) => a - b);
   const rawSegments = [];
@@ -1454,7 +1443,6 @@ function computeMutualIntervalsClient(userIntervalsMap, totalMembersCount) {
         }
       }
     }
-
     if (activeUsers.length > 0) {
       rawSegments.push({
         start: segStart,
@@ -1556,14 +1544,11 @@ function selectGroupInAvailability(groupId, shouldScroll = false) {
   if (!group) return;
   state.selectedGroup = group;
   if (availGroupSelect) availGroupSelect.value = String(groupId);
-
   if (groupAvailEmptyState) groupAvailEmptyState.classList.add("hidden");
   if (groupAvailNoSelection) groupAvailNoSelection.classList.add("hidden");
   if (groupAvailContent) groupAvailContent.classList.remove("hidden");
-
   if (availGroupName) availGroupName.textContent = group.name;
   if (availGroupDesc) availGroupDesc.textContent = group.description || "No description provided.";
-
   const isOwner = state.currentUser && group.owner_id === state.currentUser.id;
   if (availGroupRoleBadge) {
     availGroupRoleBadge.textContent = isOwner ? "Owner" : "Member";
@@ -1620,7 +1605,6 @@ window.openGroupDetail = async function (groupId) {
   if (modalGroupInviteCode) {
     modalGroupInviteCode.textContent = group.invite_code || "--------";
   }
-
   const isOwner = state.currentUser && group.owner_id === state.currentUser.id;
   if (modalGroupRoleBadge) {
     modalGroupRoleBadge.textContent = isOwner ? "Owner" : "Member";
@@ -1784,7 +1768,7 @@ function connectGroupWebSocket(groupId) {
         } else if (msg.type === "POLL_DELETED" && msg.poll_id) {
           delete state.currentGroupPolls[msg.poll_id];
           if (msg.date && msg.start_time && msg.end_time) {
-            const key = `${msg.date}_${msg.start_time.slice(0, 5)}_${msg.end_time.slice(0, 5)}`;
+            const key = `${msg.date}_${String(msg.start_time).slice(0, 5)}_${String(msg.end_time).slice(0, 5)}`;
             delete state.currentGroupPolls[key];
           }
           const pollSection = document.getElementById(`poll-section-${msg.poll_id}`);
@@ -1824,7 +1808,6 @@ function disconnectGroupWebSocket() {
 function renderPollHtml(poll, isLeader, groupId) {
   if (!poll || poll.is_deleted) return "";
   const totalVotes = poll.total_votes || 0;
-
   const progressBars = (poll.options || []).map((opt) => {
     let color = "#6366f1";
     if (opt.text.toLowerCase() === "yes") color = "#10b981";
@@ -1854,7 +1837,7 @@ function renderPollHtml(poll, isLeader, groupId) {
   return `
     <div class="poll-section" id="poll-section-${poll.id}">
       <div class="poll-header">
-        <span class="hangout-place-badge">📍 Place: ${escapeHtml(poll.place || "Dinner at a restaurant")}</span>
+        <span class="hangout-place-badge">🍽 Place: ${escapeHtml(poll.place || "Dinner at a restaurant")}</span>
         <div style="display: flex; align-items: center; gap: 0.5rem;">
           <span style="font-size: 0.74rem;">${totalVotes} vote${totalVotes === 1 ? "" : "s"} total</span>
           ${deletePollBtn}
@@ -1873,7 +1856,7 @@ function renderPollHtml(poll, isLeader, groupId) {
 function updatePollCardDOM(poll) {
   if (!poll || poll.is_deleted) return;
   state.currentGroupPolls[poll.id] = poll;
-  const pollKey = `${poll.date}_${poll.start_time.slice(0, 5)}_${poll.end_time.slice(0, 5)}`;
+  const pollKey = `${poll.date}_${String(poll.start_time).slice(0, 5)}_${String(poll.end_time).slice(0, 5)}`;
   state.currentGroupPolls[pollKey] = poll;
 
   const pollSection = document.getElementById(`poll-section-${poll.id}`);
@@ -1903,22 +1886,17 @@ window.deleteHangoutPoll = async function (groupId, pollId, pDate, pStart, pEnd)
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Failed to delete poll.");
-
     showToast("Poll deleted successfully.", "info");
 
-    // Remove ID reference
     delete state.currentGroupPolls[pollId];
 
-    // Remove Date_Start_End formatted reference
     if (pDate && pStart && pEnd) {
       const key5 = `${pDate}_${String(pStart).slice(0, 5)}_${String(pEnd).slice(0, 5)}`;
       delete state.currentGroupPolls[key5];
     }
 
-    // Immediately remove DOM element and trigger a clean re-render of shared slots
     const pollSection = document.getElementById(`poll-section-${pollId}`);
     if (pollSection) pollSection.remove();
-
     renderGroupSharedSlots();
   } catch (err) {
     showToast(err.message, "error");
@@ -1959,7 +1937,6 @@ if (groupAddPollOptionForm) {
       showToast("Please enter an option name.", "info");
       return;
     }
-
     const btn = document.getElementById("btn-group-add-poll-option");
     const btnText = btn ? btn.querySelector(".btn-text") : null;
     const spinner = btn ? btn.querySelector(".spinner") : null;
@@ -2002,7 +1979,6 @@ async function loadGroupAvailability(groupId) {
   if (!availSharedSlotsContainer || !availMembersList) return;
   availSharedSlotsContainer.innerHTML = `<p class="cal-empty-slots">Loading group availability...</p>`;
   availMembersList.innerHTML = `<p class="cal-empty-slots">Loading member schedules...</p>`;
-
   try {
     connectGroupWebSocket(groupId);
     const res = await fetch(`/api/groups/${groupId}/availability`, {
@@ -2010,7 +1986,6 @@ async function loadGroupAvailability(groupId) {
     });
     if (!res.ok) throw new Error("Failed to load group availability.");
     const data = await res.json();
-
     state.currentGroupData = data;
     state.currentGroupPolls = {};
     if (data.polls && Array.isArray(data.polls)) {
@@ -2020,12 +1995,10 @@ async function loadGroupAvailability(groupId) {
         state.currentGroupPolls[key] = p;
       });
     }
-
     state.selectedMemberIds = new Set(data.members.map((m) => m.user_id));
     if (availMembersCount) {
       availMembersCount.textContent = `${data.members.length} member${data.members.length > 1 ? "s" : ""}`;
     }
-
     renderMemberFilterChips();
     renderGroupSharedSlots();
     renderGroupIndividualMembers(data.members);
@@ -2130,7 +2103,7 @@ function renderGroupSharedSlots() {
   if (allSharedList.length === 0 && allPartialList.length === 0) {
     availSharedSlotsContainer.innerHTML = `
       <div style="text-align: center; padding: 1.5rem 1rem;">
-        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">🏖️</div>
+        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">🗓</div>
         <p style="color: var(--text-main); font-weight: 600; margin-bottom: 0.35rem;">No overlapping free times found</p>
         <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">
           The selected ${totalSelected} member${totalSelected > 1 ? "s" : ""} have no overlapping hours. Try unchecking busy members or ask members to add more open slots.
@@ -2157,7 +2130,7 @@ function renderGroupSharedSlots() {
         const userTags = slot.users
           .map((u) => `<span class="avail-pill" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.3); color: #34d399;">@${escapeHtml(u)}</span>`)
           .join("");
-        const pollKey = `${slot.date}_${slot.start_time.slice(0, 5)}_${slot.end_time.slice(0, 5)}`;
+        const pollKey = `${slot.date}_${String(slot.start_time).slice(0, 5)}_${String(slot.end_time).slice(0, 5)}`;
         const poll = (state.currentGroupPolls && state.currentGroupPolls[pollKey]) || null;
         const isLeader = Boolean(
           state.selectedGroup &&
@@ -2206,7 +2179,7 @@ function renderGroupSharedSlots() {
         const userTags = slot.users
           .map((u) => `<span class="avail-pill" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">@${escapeHtml(u)}</span>`)
           .join("");
-        const pollKey = `${slot.date}_${slot.start_time.slice(0, 5)}_${slot.end_time.slice(0, 5)}`;
+        const pollKey = `${slot.date}_${String(slot.start_time).slice(0, 5)}_${String(slot.end_time).slice(0, 5)}`;
         const poll = (state.currentGroupPolls && state.currentGroupPolls[pollKey]) || null;
         const isLeader = Boolean(
           state.selectedGroup &&
@@ -2238,7 +2211,6 @@ function renderGroupSharedSlots() {
       })
       .join("");
   }
-
   availSharedSlotsContainer.innerHTML = html;
 }
 
@@ -2345,7 +2317,6 @@ if (addMemberForm) {
     if (!state.selectedGroup) return;
     const identifier = addMemberIdentifier.value.trim();
     if (!identifier) return;
-
     setButtonLoading(btnAddMember, true);
     try {
       const res = await fetch(`/api/groups/${state.selectedGroup.id}/members`, {
@@ -2359,7 +2330,7 @@ if (addMemberForm) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to add member.");
       showToast(data.message || "Member added!", "success");
-      addMemberForm.reset();
+      addMemberIdentifier.value = "";
       await loadGroupMembersForManage(state.selectedGroup.id);
       await loadGroupAvailability(state.selectedGroup.id);
       await loadUserGroups();
@@ -2451,13 +2422,11 @@ if (createGroupForm) {
     e.preventDefault();
     const name = groupNameInput.value.trim();
     const description = groupDescInput.value.trim() || null;
-
     if (!name || name.length < 2) {
       showToast("Group name must be at least 2 characters.", "error");
       groupNameInput.focus();
       return;
     }
-
     setButtonLoading(btnCreateGroup, true);
     try {
       const response = await fetch("/api/groups", {
@@ -2482,11 +2451,9 @@ if (createGroupForm) {
           body: formData,
         });
       }
-
       if (!response.ok) {
         throw new Error(data.detail || "Failed to create group.");
       }
-
       showToast(`Group "${data.name}" created successfully! Invite code: ${data.invite_code}`, "success", 6000);
       createGroupForm.reset();
       await loadUserGroups();
@@ -2510,7 +2477,6 @@ if (joinGroupForm) {
       if (joinInviteCodeInput) joinInviteCodeInput.focus();
       return;
     }
-
     setButtonLoading(btnJoinGroup, true);
     try {
       const response = await fetch("/api/groups/join", {
@@ -2521,12 +2487,10 @@ if (joinGroupForm) {
         },
         body: JSON.stringify({ invite_code: code }),
       });
-
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.detail || "Failed to join group.");
       }
-
       showToast(`Successfully joined group "${data.name}"!`, "success", 5000);
       joinGroupForm.reset();
       await loadUserGroups();
