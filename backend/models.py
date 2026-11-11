@@ -41,6 +41,7 @@ class User(Base):
     street_address = Column(String(255), nullable=True)
     state = Column(String(2), nullable=True)
     zip_code = Column(String(10), nullable=True)
+    max_travel_distance = Column(Integer, nullable=True, default=25)  # <--- Added
     avatar_url = Column(String(255), nullable=True)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)

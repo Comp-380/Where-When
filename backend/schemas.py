@@ -51,11 +51,12 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = Field(None, max_length=100)
-    username: Optional[str] = Field(None, min_length=3, max_length=30)
-    street_address: Optional[str] = Field(None, max_length=255)
-    state: Optional[str] = Field(None, max_length=2)
-    zip_code: Optional[str] = Field(None, max_length=10)
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    street_address: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    max_travel_distance: Optional[int] = None
 
 
 class UserLogin(BaseModel):
@@ -66,11 +67,12 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
-    email: str
+    email: EmailStr
     full_name: Optional[str] = None
     street_address: Optional[str] = None
     state: Optional[str] = None
     zip_code: Optional[str] = None
+    max_travel_distance: Optional[int] = None
     avatar_url: Optional[str] = None
     is_active: bool
     is_verified: bool

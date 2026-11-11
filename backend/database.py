@@ -35,6 +35,7 @@ def initialize_database(db_engine=engine):
             "street_address": "VARCHAR(255)",
             "state": "VARCHAR(2)",
             "zip_code": "VARCHAR(10)",
+            "max_travel_distance": "INTEGER DEFAULT 25",  # <--- Added
         }
         with db_engine.begin() as connection:
             for col_name, col_type in profile_columns.items():
