@@ -390,6 +390,7 @@ function evaluatePassword(pwd) {
     passwordStrengthText.textContent = label;
     passwordStrengthText.style.color = color;
   }
+
   return passedCount === 5;
 }
 
@@ -693,6 +694,7 @@ function evaluateResetPassword(pwd) {
     rpPasswordStrengthText.textContent = label;
     rpPasswordStrengthText.style.color = color;
   }
+
   return passedCount === 5;
 }
 
@@ -791,6 +793,7 @@ function handleAuthSuccess(authData) {
   renderDashboard(authData.user);
   loadAvailabilities();
   loadUserGroups();
+
   if (sessionStorage.getItem("pending_join_code")) {
     handlePendingJoinCode();
   } else {
@@ -911,6 +914,7 @@ async function checkPasswordResetParam() {
   const resetToken =
     params.get("reset_token") ||
     (window.location.pathname.includes("reset-password") ? params.get("token") : null);
+
   if (!resetToken) return;
   try {
     const res = await fetch(`/api/auth/verify-reset-token?token=${encodeURIComponent(resetToken)}`);
@@ -1041,11 +1045,9 @@ function renderCalendar() {
     cell.className = "cal-day-cell";
     cell.textContent = day;
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-
     if (state.userAvailabilities.some((a) => a.date === dateStr)) {
       cell.classList.add("has-slots");
     }
-
     if (state.selectedDateStr === dateStr) {
       cell.classList.add("selected");
     }
@@ -1070,6 +1072,7 @@ function selectCalendarDate(dateStr) {
     day: "numeric",
     year: "numeric",
   })}`;
+
   renderSlotsForDate(dateStr);
 }
 
@@ -1210,6 +1213,7 @@ if (editProfileForm) {
       if (!res.ok) throw new Error(data.detail || "Failed to update profile.");
       state.currentUser = data;
       renderDashboard(data);
+
       editProfileForm.classList.add("hidden");
       showToast("Profile updated successfully!", "success");
     } catch (err) {
@@ -1422,7 +1426,6 @@ function computeMutualIntervalsClient(userIntervalsMap, totalMembersCount) {
     }
   }
   if (boundariesSet.size === 0) return { shared: [], partial: [] };
-
   const boundaries = Array.from(boundariesSet).sort((a, b) => a - b);
   const rawSegments = [];
 
@@ -1596,6 +1599,7 @@ window.openGroupDetail = async function (groupId) {
   const group = state.userGroups.find((g) => g.id === groupId);
   if (!group) return;
   state.selectedGroup = group;
+
   if (modalGroupName) modalGroupName.textContent = group.name;
   if (modalGroupDesc) modalGroupDesc.textContent = group.description || "No description provided.";
   if (modalGroupInviteCode) {
@@ -2137,7 +2141,7 @@ function renderGroupSharedSlots() {
         return `
           <div class="shared-slot-card">
             <div class="shared-slot-header">
-              <span class="shared-date-pill">📅 ${escapeHtml(dateFormatted)}</span>
+              <span class="shared-date-pill">🗓️ ${escapeHtml(dateFormatted)}</span>
               <span class="badge-everyone">All ${slot.total} Free</span>
             </div>
             <div style="margin: 0.45rem 0;">
@@ -2186,7 +2190,7 @@ function renderGroupSharedSlots() {
         return `
           <div class="shared-slot-card partial">
             <div class="shared-slot-header">
-              <span class="shared-date-pill">📅 ${escapeHtml(dateFormatted)}</span>
+              <span class="shared-date-pill">🗓️ ${escapeHtml(dateFormatted)}</span>
               <span class="badge-partial">${slot.count} of ${slot.total} Free</span>
             </div>
             <div style="margin: 0.45rem 0;">
@@ -2434,6 +2438,7 @@ if (createGroupForm) {
         body: JSON.stringify({ name, description }),
       });
       const data = await response.json();
+
       const photoInput = document.getElementById("group-photo-input");
       if (response.ok && photoInput && photoInput.files[0]) {
         const formData = new FormData();
