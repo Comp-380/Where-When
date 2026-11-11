@@ -1324,6 +1324,9 @@ def update_profile(
     if user_update.zip_code is not None:
         current_user.zip_code = user_update.zip_code.strip() if user_update.zip_code else None
 
+    if user_update.max_travel_distance is not None:
+        current_user.max_travel_distance = user_update.max_travel_distance
+
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
