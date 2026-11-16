@@ -395,3 +395,101 @@ def test_websocket_realtime_broadcast():
         yes_opt = next(o for o in poll_info["options"] if o["text"] == "Yes")
         assert yes_opt["count"] == 1
         assert yes_opt["percentage"] == 100.0
+
+
+def test_place_multi_voting_and_current_place_resolution():
+    db = TestingSessionLocal()
+    alice = create_user(db, "alice_pv", "alice_pv@test.com")
+    bob = create_user(db, "bob_pv", "bob_pv@test.com")
+
+    group = Group(name="Food Voting Group", owner_id=alice.id)
+    db.add(group)
+    db.commit()
+    db.refresh(group)
+
+    db.add_all([
+        GroupMember(group_id=group.id, user_id=alice.id, role="owner"),
+        GroupMember(group_id=group.id, user_id=bob.id, role="member"),
+    ])
+
+    poll = HangoutPoll(
+        group_id=group.id,
+        date=date(2026, 11, 28),
+        start_time=time(18, 30),
+        end_time=time(21, 0),
+        place="Dinner at a restaurant",
+    )
+    db.add(poll)
+    db.flush()
+    opt_yes = PollOption(poll_id=poll.id, text="Yes", is_default=True)
+    opt_no = PollOption(poll_id=poll.id, text="No", is_default=True)
+    db.add_all([opt_yes, opt_no])
+    db.commit()
+    db.refresh(poll)
+
+    token_alice = create_access_token({"sub": str(alice.id), "type": "access"})
+    token_bob = create_access_token({"sub": str(bob.id), "type": "access"})
+
+    # 1. Initially, no place votes exist -> Current Place: Not Yet Decided
+    res_get = client.get(
+        f"/api/groups/{group.id}/hangouts",
+        headers={"Authorization": f"Bearer {token_alice}"},
+    )
+    assert res_get.status_code == 200
+    p0 = res_get.json()[0]
+    assert p0["current_place"] == "Not Yet Decided"
+    assert p0["place_votes"] == []
+    assert p0["my_place_votes"] == []
+
+    # 2. Alice votes Yes on "Rustic Spoon Italian"
+    res_v1 = client.post(
+        f"/api/groups/{group.id}/hangouts/{poll.id}/place-vote",
+        json={"place_name": "Rustic Spoon Italian"},
+        headers={"Authorization": f"Bearer {token_alice}"},
+    )
+    assert res_v1.status_code == 200
+    p1 = res_v1.json()
+    assert p1["current_place"] == "Rustic Spoon Italian"
+    assert "Rustic Spoon Italian" in p1["my_place_votes"]
+    spoon_vote = next(pv for pv in p1["place_votes"] if pv["place_name"] == "Rustic Spoon Italian")
+    assert spoon_vote["count"] == 1
+    assert "alice_pv" in spoon_vote["voters"]
+    assert spoon_vote["has_voted"] is True
+
+    # 3. Alice also votes Yes on "El Fuego Cantina" (multi-place voting!)
+    res_v2 = client.post(
+        f"/api/groups/{group.id}/hangouts/{poll.id}/place-vote",
+        json={"place_name": "El Fuego Cantina"},
+        headers={"Authorization": f"Bearer {token_alice}"},
+    )
+    assert res_v2.status_code == 200
+    p2 = res_v2.json()
+    assert len(p2["my_place_votes"]) == 2
+    assert "Rustic Spoon Italian" in p2["my_place_votes"]
+    assert "El Fuego Cantina" in p2["my_place_votes"]
+
+    # 4. Bob votes for "El Fuego Cantina" -> "El Fuego Cantina" now has 2 votes and leads!
+    res_v3 = client.post(
+        f"/api/groups/{group.id}/hangouts/{poll.id}/place-vote",
+        json={"place_name": "El Fuego Cantina"},
+        headers={"Authorization": f"Bearer {token_bob}"},
+    )
+    assert res_v3.status_code == 200
+    p3 = res_v3.json()
+    assert p3["current_place"] == "El Fuego Cantina"
+    fuego_vote = next(pv for pv in p3["place_votes"] if pv["place_name"] == "El Fuego Cantina")
+    assert fuego_vote["count"] == 2
+    assert sorted(fuego_vote["voters"]) == ["alice_pv", "bob_pv"]
+
+    # 5. Alice toggles off her vote for "El Fuego Cantina"
+    res_v4 = client.post(
+        f"/api/groups/{group.id}/hangouts/{poll.id}/place-vote",
+        json={"place_name": "El Fuego Cantina"},
+        headers={"Authorization": f"Bearer {token_alice}"},
+    )
+    assert res_v4.status_code == 200
+    p4 = res_v4.json()
+    assert "El Fuego Cantina" not in p4["my_place_votes"]
+    # Now both have 1 vote (Rustic Spoon Italian: 1, El Fuego: 1) -> joined by /
+    assert "Rustic Spoon Italian" in p4["current_place"]
+    assert "El Fuego Cantina" in p4["current_place"]
