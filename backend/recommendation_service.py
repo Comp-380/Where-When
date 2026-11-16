@@ -351,10 +351,18 @@ async def fetch_osm_places(
     Fetches real places and venues around group midpoint using OpenStreetMap.
     Requires NO API KEY and NO CREDIT CARD.
     """
-    queries = ["restaurant", "cafe"] if category == "food" else ["cinema", "bowling"]
+    queries = ["restaurant", "cafe"] if category == "food" else ["cinema", "bowling", "theater"]
     delta = min(0.25, max(0.04, max_radius_miles * 0.014))
     headers = {"User-Agent": "WhereWhenPlanner/1.0 (contact@wherewhen.local)"}
     results = []
+
+    subcat_map = {
+        "restaurant": "Restaurant",
+        "cafe": "Cafe & Coffee",
+        "cinema": "Movie Theater",
+        "bowling": "Bowling Alley",
+        "theater": "Theater & Performing Arts",
+    }
 
     try:
         async with httpx.AsyncClient(timeout=4.0) as client:
@@ -375,7 +383,7 @@ async def fetch_osm_places(
                         lat = float(item["lat"])
                         lon = float(item["lon"])
                         addr = item.get("display_name", "")
-                        subcat = "Restaurant" if category == "food" else q.capitalize()
+                        subcat = subcat_map.get(q, q.capitalize())
                         results.append({
                             "id": f"osm_{item.get('place_id', raw_name)}",
                             "title": raw_name,
