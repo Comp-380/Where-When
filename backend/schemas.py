@@ -73,6 +73,8 @@ class UserResponse(BaseModel):
     state: Optional[str] = None
     zip_code: Optional[str] = None
     max_travel_distance: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     avatar_url: Optional[str] = None
     is_active: bool
     is_verified: bool
@@ -235,6 +237,27 @@ class PollOptionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PlaceVoteRequest(BaseModel):
+    place_name: str
+
+    @field_validator("place_name")
+    @classmethod
+    def validate_place_name(cls, v: str) -> str:
+        clean = v.strip()
+        if not clean:
+            raise ValueError("Place name cannot be empty.")
+        return clean
+
+
+class PlaceVoteSummary(BaseModel):
+    place_name: str
+    count: int = 0
+    voters: List[str] = []
+    has_voted: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class HangoutPollResponse(BaseModel):
     id: int
     group_id: int
@@ -242,9 +265,12 @@ class HangoutPollResponse(BaseModel):
     start_time: TimeType
     end_time: TimeType
     place: str
+    current_place: Optional[str] = "Not Yet Decided"
     total_votes: int = 0
     my_vote_option_id: Optional[int] = None
     options: List[PollOptionResponse] = []
+    place_votes: List[PlaceVoteSummary] = []
+    my_place_votes: List[str] = []
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -273,3 +299,45 @@ class GroupAvailabilityResponse(BaseModel):
     polls: List[HangoutPollResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Place & Entertainment Recommendations Schemas ---
+class UserDistanceInfo(BaseModel):
+    user_id: int
+    username: str
+    full_name: Optional[str] = None
+    distance_miles: float
+    max_distance_miles: Optional[int] = None
+    is_within_limit: bool
+
+
+class RecommendationItem(BaseModel):
+    id: str
+    title: str
+    item_type: str = "venue"  # "venue" or "event"
+    category: str = "Food & Dining"  # "Food & Dining" or "Entertainment"
+    subcategory: str = "Venue"
+    address: str = ""
+    rating: Optional[float] = None
+    price_level: Optional[str] = None
+    maps_url: Optional[str] = None
+    ticket_url: Optional[str] = None
+    event_time: Optional[str] = None
+    is_open_confirmed: bool = True
+    open_hours_text: Optional[str] = None
+    avg_distance_miles: float
+    all_within_limit: bool = True
+    user_distances: List[UserDistanceInfo] = []
+    is_mock: bool = False
+    source: str = "Live"
+
+
+class PollRecommendationsResponse(BaseModel):
+    poll_id: int
+    group_id: int
+    category: str
+    midpoint_address: Optional[str] = None
+    missing_address_users: List[str] = []
+    is_mock_data: bool = False
+    data_source_notice: Optional[str] = None
+    items: List[RecommendationItem] = []

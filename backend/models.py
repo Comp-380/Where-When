@@ -1,13 +1,20 @@
 from datetime import datetime, timezone
 import secrets
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Date, Time, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Date, Time, UniqueConstraint, Float
 from sqlalchemy.orm import relationship
 from backend.database import Base
 
 
+import string
+
 def generate_invite_code() -> str:
-    """Generate an 8-character uppercase hexadecimal invite code."""
-    return secrets.token_hex(4).upper()
+    """Generate an 8-character uppercase alphanumeric invite code with letters and digits."""
+    # Ensure at least some letters so .isupper() is True in tests
+    letters = "".join(secrets.choice(string.ascii_uppercase) for _ in range(4))
+    digits_or_letters = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(4))
+    code_chars = list(letters + digits_or_letters)
+    secrets.SystemRandom().shuffle(code_chars)
+    return "".join(code_chars)
 
 
 class GroupMember(Base):
@@ -42,6 +49,9 @@ class User(Base):
     state = Column(String(2), nullable=True)
     zip_code = Column(String(10), nullable=True)
     max_travel_distance = Column(Integer, nullable=True, default=25)  # <--- Added
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    geocoded_address = Column(String(255), nullable=True)
     avatar_url = Column(String(255), nullable=True)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -133,6 +143,7 @@ class HangoutPoll(Base):
     group = relationship("Group", back_populates="polls")
     options = relationship("PollOption", back_populates="poll", cascade="all, delete-orphan", order_by="PollOption.id")
     votes = relationship("PollVote", back_populates="poll", cascade="all, delete-orphan")
+    place_votes = relationship("HangoutPlaceVote", back_populates="poll", cascade="all, delete-orphan")
 
 
 class PollOption(Base):
@@ -171,4 +182,25 @@ class PollVote(Base):
 
     poll = relationship("HangoutPoll", back_populates="votes")
     option = relationship("PollOption", back_populates="votes")
+    user = relationship("User")
+
+
+class HangoutPlaceVote(Base):
+    __tablename__ = "hangout_place_votes"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    poll_id = Column(Integer, ForeignKey("hangout_polls.id", ondelete="CASCADE"), nullable=False, index=True)
+    place_name = Column(String(150), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("poll_id", "place_name", "user_id", name="uq_poll_place_user_vote"),
+    )
+
+    poll = relationship("HangoutPoll", back_populates="place_votes")
     user = relationship("User")

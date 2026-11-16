@@ -1808,17 +1808,30 @@ function disconnectGroupWebSocket() {
 
 function renderPollHtml(poll, isLeader, groupId) {
   if (!poll || poll.is_deleted) return "";
-  const totalVotes = poll.total_votes || 0;
-  const progressBars = (poll.options || []).map((opt) => {
+  
+  // Filter poll options so the poll card ONLY displays Yes, No, and custom poll options added by the group leader
+  const groupCustomTexts = new Set(
+    (state.currentGroupPollOptions || []).map((o) => o.text.trim().toLowerCase())
+  );
+  const visibleOptions = (poll.options || []).filter((opt) => {
+    const textLower = opt.text.trim().toLowerCase();
+    return textLower === "yes" || textLower === "no" || groupCustomTexts.has(textLower);
+  });
+
+  const totalVotes = visibleOptions.reduce((acc, opt) => acc + (opt.count || 0), 0);
+
+  const progressBars = visibleOptions.map((opt) => {
     let color = "#6366f1";
     if (opt.text.toLowerCase() === "yes") color = "#10b981";
     else if (opt.text.toLowerCase() === "no") color = "#ef4444";
-    return `<div class="poll-progress-segment" style="width: ${opt.percentage}%; background: ${color};" title="${escapeHtml(opt.text)}: ${opt.count} (${opt.percentage}%)"></div>`;
+    const pct = totalVotes > 0 ? Math.round((opt.count / totalVotes) * 1000) / 10 : 0;
+    return `<div class="poll-progress-segment" style="width: ${pct}%; background: ${color};" title="${escapeHtml(opt.text)}: ${opt.count} (${pct}%)"></div>`;
   }).join("");
 
-  const optionsHtml = (poll.options || []).map((opt) => {
+  const optionsHtml = visibleOptions.map((opt) => {
     const isVoted = poll.my_vote_option_id === opt.id;
     const textLower = opt.text.toLowerCase();
+    const pct = totalVotes > 0 ? Math.round((opt.count / totalVotes) * 1000) / 10 : 0;
     let optClass = "poll-option-btn";
     if (textLower === "yes") optClass += " opt-yes";
     if (textLower === "no") optClass += " opt-no";
@@ -1826,7 +1839,7 @@ function renderPollHtml(poll, isLeader, groupId) {
     return `
       <button type="button" class="${optClass}" onclick="castHangoutVote(${groupId}, ${poll.id}, ${opt.id})" title="${opt.voters && opt.voters.length ? `Voters: @${opt.voters.join(', @')}` : 'No votes yet'}">
         <span>${textLower === "yes" ? "👍 " : (textLower === "no" ? "👎 " : "")}${escapeHtml(opt.text)}</span>
-        <span class="poll-stat-badge">${opt.count} (${opt.percentage}%)</span>
+        <span class="poll-stat-badge">${opt.count} (${pct}%)</span>
       </button>
     `;
   }).join("");
@@ -1835,10 +1848,36 @@ function renderPollHtml(poll, isLeader, groupId) {
     ? `<button type="button" class="btn-del-poll" onclick="deleteHangoutPoll(${groupId}, ${poll.id}, '${poll.date}', '${poll.start_time}', '${poll.end_time}')" title="Delete Poll">Delete Poll</button>`
     : "";
 
+  // Determine Current Place:
+  // Derived from user votes on places in the "Find Activities & Food" menu.
+  // Falls back to "Not Yet Decided" if no votes yet.
+  let currentPlaceText = poll.current_place || "Not Yet Decided";
+  if (poll.place_votes && poll.place_votes.length > 0) {
+    let maxVotes = 0;
+    for (const pv of poll.place_votes) {
+      if (pv.count > maxVotes) maxVotes = pv.count;
+    }
+    if (maxVotes > 0) {
+      const topPlaces = poll.place_votes.filter((pv) => pv.count === maxVotes);
+      currentPlaceText = topPlaces.map((tp) => tp.place_name).join(" / ");
+    } else {
+      currentPlaceText = "Not Yet Decided";
+    }
+  }
+
+  const recBtnHtml = `
+    <button type="button" class="btn-rec-trigger" onclick="openRecommendationsModal(${poll.id}, ${groupId || (state.selectedGroup ? state.selectedGroup.id : null)})" title="Explore open restaurants, activities, and events tailored to group commute">
+      🔍 Find Activities & Food
+    </button>
+  `;
+
   return `
+    <div class="hangout-place-display">
+      <span class="hangout-place-label">📍 Current Place:</span>
+      <span class="hangout-place-value">${escapeHtml(currentPlaceText)}</span>
+    </div>
     <div class="poll-section" id="poll-section-${poll.id}">
       <div class="poll-header">
-        <span class="hangout-place-badge">🍽 Place: ${escapeHtml(poll.place || "Dinner at a restaurant")}</span>
         <div style="display: flex; align-items: center; gap: 0.5rem;">
           <span style="font-size: 0.74rem;">${totalVotes} vote${totalVotes === 1 ? "" : "s"} total</span>
           ${deletePollBtn}
@@ -1847,8 +1886,11 @@ function renderPollHtml(poll, isLeader, groupId) {
       <div class="poll-progress-container">
         ${totalVotes > 0 ? progressBars : `<div class="poll-progress-segment" style="width: 100%; background: rgba(255,255,255,0.06);"></div>`}
       </div>
-      <div class="poll-options-list">
-        ${optionsHtml}
+      <div class="poll-options-row">
+        <div class="poll-options-list">
+          ${optionsHtml}
+        </div>
+        ${recBtnHtml}
       </div>
     </div>
   `;
@@ -1860,6 +1902,18 @@ function updatePollCardDOM(poll) {
   const pollKey = `${poll.date}_${String(poll.start_time).slice(0, 5)}_${String(poll.end_time).slice(0, 5)}`;
   state.currentGroupPolls[pollKey] = poll;
 
+  const pollWrapper = document.getElementById(`slot-poll-wrapper-${poll.id}`);
+  if (pollWrapper) {
+    const isLeader = Boolean(
+      state.selectedGroup &&
+      state.currentUser &&
+      state.selectedGroup.owner_id === state.currentUser.id
+    );
+    pollWrapper.innerHTML = renderPollHtml(poll, isLeader, poll.group_id);
+    return;
+  }
+
+  // Fallback to legacy poll-section selector if wrapper not found
   const pollSection = document.getElementById(`poll-section-${poll.id}`);
   if (pollSection) {
     const isLeader = Boolean(
@@ -1869,7 +1923,7 @@ function updatePollCardDOM(poll) {
     );
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = renderPollHtml(poll, isLeader, poll.group_id);
-    const newSection = tempDiv.firstElementChild;
+    const newSection = tempDiv.querySelector(".poll-section");
     if (newSection) {
       pollSection.replaceWith(newSection);
     }
@@ -2142,22 +2196,20 @@ function renderGroupSharedSlots() {
         return `
           <div class="shared-slot-card">
             <div class="shared-slot-header">
-              <span class="shared-date-pill">🗓️ ${escapeHtml(dateFormatted)}</span>
-              <span class="badge-everyone">All ${slot.total} Free</span>
-            </div>
-            <div style="margin: 0.45rem 0;">
-              <span class="shared-time-text">
-                ${startTime12} – ${endTime12}
-                <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400; margin-left: 0.4rem;">
-                  (${slot.start_time.slice(0, 5)} - ${slot.end_time.slice(0, 5)})
-                </span>
+              <span class="shared-slot-datetime">
+                <span>🗓️ ${escapeHtml(dateFormatted)}</span>
+                <span class="slot-datetime-sep">•</span>
+                <span>${startTime12} – ${endTime12}</span>
               </span>
+              <span class="badge-everyone">All ${slot.total} Free</span>
             </div>
             <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.35rem;">
               <span style="font-size: 0.72rem; color: var(--text-secondary);">Available:</span>
               ${userTags}
             </div>
-            ${pollHtml}
+            <div id="${poll ? `slot-poll-wrapper-${poll.id}` : ''}">
+              ${pollHtml}
+            </div>
           </div>
         `;
       })
@@ -2191,22 +2243,20 @@ function renderGroupSharedSlots() {
         return `
           <div class="shared-slot-card partial">
             <div class="shared-slot-header">
-              <span class="shared-date-pill">🗓️ ${escapeHtml(dateFormatted)}</span>
-              <span class="badge-partial">${slot.count} of ${slot.total} Free</span>
-            </div>
-            <div style="margin: 0.45rem 0;">
-              <span class="shared-time-text">
-                ${startTime12} – ${endTime12}
-                <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400; margin-left: 0.4rem;">
-                  (${slot.start_time.slice(0, 5)} - ${slot.end_time.slice(0, 5)})
-                </span>
+              <span class="shared-slot-datetime">
+                <span>🗓️ ${escapeHtml(dateFormatted)}</span>
+                <span class="slot-datetime-sep">•</span>
+                <span>${startTime12} – ${endTime12}</span>
               </span>
+              <span class="badge-partial">${slot.count} of ${slot.total} Free</span>
             </div>
             <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.35rem;">
               <span style="font-size: 0.72rem; color: var(--text-secondary);">Available:</span>
               ${userTags}
             </div>
-            ${pollHtml}
+            <div id="${poll ? `slot-poll-wrapper-${poll.id}` : ''}">
+              ${pollHtml}
+            </div>
           </div>
         `;
       })
@@ -2505,6 +2555,352 @@ if (joinGroupForm) {
   });
 }
 
+// --- Recommendations & Activity Finder Modal Logic ---
+const recommendationsModal = document.getElementById("recommendations-modal");
+const btnCloseRecModal = document.getElementById("btn-close-rec-modal");
+const recModalSlotInfo = document.getElementById("rec-modal-slot-info");
+const recMidpointText = document.getElementById("rec-midpoint-text");
+const recMissingAddressWarning = document.getElementById("rec-missing-address-warning");
+const recMissingUsersList = document.getElementById("rec-missing-users-list");
+const recTabFood = document.getElementById("rec-tab-food");
+const recTabEntertainment = document.getElementById("rec-tab-entertainment");
+const recItemsCount = document.getElementById("rec-items-count");
+const recLoadingSpinner = document.getElementById("rec-loading-spinner");
+const recCardsList = document.getElementById("rec-cards-list");
+const recSourceNotice = document.getElementById("rec-source-notice");
+const recSourceIcon = document.getElementById("rec-source-icon");
+const recSourceText = document.getElementById("rec-source-text");
+
+state.activeRecPoll = null;
+state.activeRecCategory = "food";
+state.recCache = {};
+
+window.openRecommendationsModal = async function (pollId, groupId, dateStr, startTime, endTime, currentPlace) {
+  try {
+    const effectiveGroupId = groupId || (state.selectedGroup ? state.selectedGroup.id : null);
+    const poll = (state.currentGroupPolls && state.currentGroupPolls[pollId]) || null;
+    const effectiveDate = dateStr || (poll ? poll.date : "");
+    const effectiveStart = startTime || (poll ? poll.start_time : "");
+    const effectiveEnd = endTime || (poll ? poll.end_time : "");
+    const effectivePlace = currentPlace || (poll ? poll.place : "");
+
+    state.activeRecPoll = {
+      pollId,
+      groupId: effectiveGroupId,
+      dateStr: effectiveDate,
+      startTime: effectiveStart,
+      endTime: effectiveEnd,
+      currentPlace: effectivePlace,
+    };
+    state.activeRecCategory = "food";
+
+    if (recModalSlotInfo) {
+      const formattedDate = effectiveDate ? formatDatePretty(effectiveDate) : "";
+      const startFmt = effectiveStart ? formatTime12h(String(effectiveStart).slice(0, 5)) : "";
+      const endFmt = effectiveEnd ? formatTime12h(String(effectiveEnd).slice(0, 5)) : "";
+      recModalSlotInfo.textContent = formattedDate ? `📅 ${formattedDate} • ${startFmt} – ${endFmt}` : "Hangout Slot";
+    }
+
+    if (recTabFood) recTabFood.classList.add("active");
+    if (recTabEntertainment) recTabEntertainment.classList.remove("active");
+
+    if (recommendationsModal) recommendationsModal.classList.remove("hidden");
+    await loadPollRecommendations("food");
+  } catch (err) {
+    console.error("Error opening recommendations modal:", err);
+    if (recommendationsModal) recommendationsModal.classList.remove("hidden");
+    showToast("Failed to initialize recommendations: " + err.message, "error");
+  }
+};
+
+window.closeRecommendationsModal = function () {
+  if (recommendationsModal) recommendationsModal.classList.add("hidden");
+  state.activeRecPoll = null;
+};
+
+if (btnCloseRecModal) {
+  btnCloseRecModal.addEventListener("click", closeRecommendationsModal);
+}
+if (recommendationsModal) {
+  recommendationsModal.addEventListener("click", (e) => {
+    if (e.target === recommendationsModal) closeRecommendationsModal();
+  });
+}
+
+window.switchRecTab = async function (category) {
+  state.activeRecCategory = category;
+  if (category === "food") {
+    if (recTabFood) recTabFood.classList.add("active");
+    if (recTabEntertainment) recTabEntertainment.classList.remove("active");
+  } else {
+    if (recTabEntertainment) recTabEntertainment.classList.add("active");
+    if (recTabFood) recTabFood.classList.remove("active");
+  }
+  await loadPollRecommendations(category);
+};
+
+window.loadPollRecommendations = async function (category) {
+  if (!state.activeRecPoll || !state.token) return;
+  const { pollId, groupId } = state.activeRecPoll;
+  const cacheKey = `${pollId}_${category}`;
+
+  if (recCardsList) recCardsList.innerHTML = "";
+  if (recLoadingSpinner) recLoadingSpinner.classList.remove("hidden");
+  if (recItemsCount) recItemsCount.textContent = "Searching...";
+
+  try {
+    let data = state.recCache[cacheKey];
+    if (!data) {
+      const res = await fetch(`/api/groups/${groupId}/hangouts/${pollId}/recommendations?category=${category}`, {
+        headers: {
+          Authorization: `Bearer ${state.token}`,
+        },
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Failed to load recommendations.");
+      }
+      data = await res.json();
+      state.recCache[cacheKey] = data;
+    }
+
+    renderRecommendationsList(data);
+  } catch (err) {
+    if (recLoadingSpinner) recLoadingSpinner.classList.add("hidden");
+    if (recCardsList) {
+      recCardsList.innerHTML = `
+        <div style="text-align: center; padding: 2rem 1rem; color: #f87171;">
+          <p style="font-size: 0.9rem;">⚠️ Failed to load options: ${escapeHtml(err.message)}</p>
+          <button type="button" class="btn-refresh" style="margin-top: 0.5rem;" onclick="loadPollRecommendations('${category}')">Try Again</button>
+        </div>
+      `;
+    }
+  }
+};
+
+function renderRecommendationsList(data) {
+  if (recLoadingSpinner) recLoadingSpinner.classList.add("hidden");
+  if (!recCardsList) return;
+
+  // Midpoint display
+  if (recMidpointText && data.midpoint) {
+    recMidpointText.textContent = `Group Midpoint: ${data.midpoint.lat.toFixed(4)}, ${data.midpoint.lon.toFixed(4)}`;
+  } else if (recMidpointText) {
+    recMidpointText.textContent = data.midpoint_address || "Calculated from members";
+  }
+
+  // Missing address warning
+  if (recMissingAddressWarning && recMissingUsersList) {
+    if (data.missing_addresses && data.missing_addresses.length > 0) {
+      recMissingUsersList.textContent = data.missing_addresses.join(", ");
+      recMissingAddressWarning.classList.remove("hidden");
+    } else if (data.missing_address_users && data.missing_address_users.length > 0) {
+      recMissingUsersList.textContent = data.missing_address_users.map((u) => `@${u}`).join(", ");
+      recMissingAddressWarning.classList.remove("hidden");
+    } else {
+      recMissingAddressWarning.classList.add("hidden");
+    }
+  }
+
+  // Source notice: clearly indicate whether live or sample data
+  if (recSourceNotice && recSourceText) {
+    recSourceNotice.classList.remove("hidden");
+    if (data.is_mock_data || data.is_mock) {
+      recSourceNotice.style.background = "rgba(245, 158, 11, 0.08)";
+      recSourceNotice.style.border = "1px solid rgba(245, 158, 11, 0.25)";
+      recSourceNotice.style.color = "#fbbf24";
+      if (recSourceIcon) recSourceIcon.textContent = "🧪";
+      recSourceText.innerHTML = `<strong>Demo Mode (Sample Data):</strong> Showing simulated verified venues. Live streaming is active when Google Places & Ticketmaster API keys are configured.`;
+    } else {
+      recSourceNotice.style.background = "rgba(59, 130, 246, 0.09)";
+      recSourceNotice.style.border = "1px solid rgba(59, 130, 246, 0.28)";
+      recSourceNotice.style.color = "#93c5fd";
+      if (recSourceIcon) recSourceIcon.textContent = "🌐";
+      recSourceText.innerHTML = `<strong>Live Stream:</strong> Verified live results from Google Places & Ticketmaster Discovery APIs.`;
+    }
+  }
+
+  const items = data.items || [];
+  if (recItemsCount) {
+    recItemsCount.textContent = `${items.length} verified ${data.category === "food" ? "dining places" : "entertainment options"}`;
+  }
+
+  if (items.length === 0) {
+    recCardsList.innerHTML = `
+      <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
+        <p style="font-size: 0.95rem; margin-bottom: 0.4rem;">No matching open venues found in this travel radius.</p>
+        <p style="font-size: 0.78rem;">Try increasing members' max travel distance in their profile settings.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const poll = state.activeRecPoll ? state.currentGroupPolls[state.activeRecPoll.pollId] : null;
+
+  // Build place vote lookup for quick rendering
+  const placeVoteLookup = {};
+  if (poll && poll.place_votes) {
+    for (const pv of poll.place_votes) {
+      placeVoteLookup[pv.place_name.toLowerCase()] = pv;
+    }
+  }
+
+  recCardsList.innerHTML = items.map((item) => {
+    const itemTitleLower = item.title.trim().toLowerCase();
+    const pvInfo = placeVoteLookup[itemTitleLower];
+    const voteCount = pvInfo ? pvInfo.count : 0;
+    const hasVoted = Boolean(
+      (pvInfo && pvInfo.has_voted) ||
+      (poll && poll.my_place_votes && poll.my_place_votes.map((p) => p.toLowerCase()).includes(itemTitleLower))
+    );
+    const votersList = pvInfo && pvInfo.voters && pvInfo.voters.length ? pvInfo.voters.join(", @") : "";
+
+    const ratingStars = item.rating ? `★ ${item.rating.toFixed(1)}` : "";
+    const priceText = item.price_level ? ` • ${item.price_level}` : "";
+
+    const openBadge = item.is_open_confirmed
+      ? `<span class="rec-badge-open">🟢 ${escapeHtml(item.open_hours_text || "Verified Open")}</span>`
+      : `<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">Hours Unverified</span>`;
+
+    const sourceBadge = item.is_mock
+      ? `<span class="rec-badge-mock" title="Sample demo item (API keys not configured)">🧪 Sample / Demo</span>`
+      : `<span class="rec-badge-live" title="Live data verified from ${escapeHtml(item.source || 'API')}">🌐 Live: ${escapeHtml(item.source || 'API')}</span>`;
+
+    const eventBadge = item.item_type === "event"
+      ? `<span class="rec-badge-event">🎵 ${escapeHtml(item.event_time || "Live Event")}</span>`
+      : "";
+
+    const commutePills = (item.user_distances || []).map((ud) => {
+      const cls = ud.is_within_limit ? "ok" : "exceeded";
+      const icon = ud.is_within_limit ? "✓" : "⚠️";
+      return `
+        <span class="rec-commute-pill ${cls}" title="${ud.is_within_limit ? 'Within max travel limit' : `Exceeds max limit (${ud.max_distance_miles} mi)`}">
+          ${icon} @${escapeHtml(ud.username)}: ${ud.distance_miles} mi
+        </span>
+      `;
+    }).join("");
+
+    const externalLink = item.maps_url
+      ? `<a href="${escapeHtml(item.maps_url)}" target="_blank" rel="noopener noreferrer" style="color: var(--accent); font-size: 0.74rem; text-decoration: none; margin-left: 0.5rem;" title="View on Maps">🗺️ Open Map</a>`
+      : "";
+
+    const ticketLink = item.ticket_url
+      ? `<a href="${escapeHtml(item.ticket_url)}" target="_blank" rel="noopener noreferrer" style="color: #fb7185; font-size: 0.74rem; text-decoration: none; margin-left: 0.5rem;" title="Get Tickets">🎟️ Tickets</a>`
+      : "";
+
+    // Vote button allowing ANY user in the group to vote Yes on this place
+    const voteBtnTitle = votersList ? `Voted by: @${escapeHtml(votersList)}` : (hasVoted ? "Click to remove your vote" : "Vote for this place");
+    const voteBtnHtml = `
+      <button
+        type="button"
+        class="btn-place-vote ${hasVoted ? 'voted' : ''}"
+        onclick="castPlaceVote(${data.group_id}, ${data.poll_id}, '${escapeHtml(item.title).replace(/'/g, "\\'")}')"
+        title="${voteBtnTitle}"
+      >
+        <span>${hasVoted ? '👍 Voted Yes' : '👍 Vote Yes'}</span>
+        <span class="place-vote-count-badge">${voteCount}</span>
+      </button>
+    `;
+
+    return `
+      <div class="rec-card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.4rem; gap: 0.5rem;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+              <strong style="font-size: 0.95rem; color: var(--text-main);">${escapeHtml(item.title)}</strong>
+              ${sourceBadge}
+              ${openBadge}
+              ${eventBadge}
+            </div>
+            <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 0.2rem;">
+              <span style="color: #fbbf24; font-weight: 600;">${ratingStars}</span>${priceText} • <span style="color: var(--text-secondary);">${escapeHtml(item.subcategory)}</span>
+              ${externalLink}${ticketLink}
+            </div>
+          </div>
+          <div style="text-align: right; flex-shrink: 0;">
+            <span style="font-size: 0.78rem; font-weight: 700; color: var(--accent); display: block;">${item.avg_distance_miles} mi avg</span>
+            <span style="font-size: 0.7rem; color: ${item.all_within_limit ? '#34d399' : '#fbbf24'};">${item.all_within_limit ? 'All members in range' : 'Partial range'}</span>
+          </div>
+        </div>
+
+        <p style="font-size: 0.76rem; color: var(--text-secondary); margin: 0 0 0.55rem 0;">
+          ${escapeHtml(item.address)}
+        </p>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-bottom: 0.65rem;">
+          <span style="font-size: 0.7rem; color: var(--text-muted); margin-right: 0.2rem;">Commutes:</span>
+          ${commutePills}
+        </div>
+
+        <div style="display: flex; gap: 0.5rem; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.5rem;">
+          <span style="font-size: 0.72rem; color: var(--text-muted);">
+            ${votersList ? `Voters: @${escapeHtml(votersList)}` : 'No votes yet for this venue'}
+          </span>
+          ${voteBtnHtml}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+window.castPlaceVote = async function (groupId, pollId, placeName) {
+  if (!state.token) return;
+  try {
+    const res = await fetch(`/api/groups/${groupId}/hangouts/${pollId}/place-vote`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${state.token}`,
+      },
+      body: JSON.stringify({ place_name: placeName }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Failed to vote on place.");
+    }
+    const updatedPoll = await res.json();
+    updatePollCardDOM(updatedPoll);
+    
+    // Update local cache or re-render active recommendations modal
+    const cacheKey = `${pollId}_${state.activeRecCategory || 'food'}`;
+    const cachedData = state.recCache[cacheKey];
+    if (cachedData) {
+      renderRecommendationsList(cachedData);
+    }
+    showToast(`Vote updated for "${placeName}"!`, "success");
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+};
+
+window.setRecommendationAsPlace = async function (groupId, pollId, itemTitle) {
+  if (!state.token) return;
+  try {
+    const res = await fetch(`/api/groups/${groupId}/hangouts/${pollId}/place`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${state.token}`,
+      },
+      body: JSON.stringify({ text: itemTitle }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Failed to update place.");
+    }
+    const updatedPoll = await res.json();
+    updatePollCardDOM(updatedPoll);
+    showToast(`Updated hangout place to "${itemTitle}"!`, "success");
+    await loadPollRecommendations(state.activeRecCategory || "food");
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+};
+
+window.suggestRecommendationToLeader = function (itemTitle) {
+  showToast(`"${itemTitle}" suggested! Only group leaders can add options to this poll.`, "info");
+};
+
 // ==================== INTERACTIVE GROUP MAP ====================
 let groupMap = null;
 let meetupPinMarker = null;
@@ -2517,7 +2913,7 @@ function initOrRefreshGroupMap() {
     // Centered on Northridge / LA
     groupMap = L.map("group-interactive-map").setView([34.2381, -118.5277], 11);
 
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "&copy; OpenStreetMap contributors",
       maxZoom: 19,
     }).addTo(groupMap);

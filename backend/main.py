@@ -51,6 +51,7 @@ from backend.models import (
     HangoutPoll,
     PollOption,
     PollVote,
+    HangoutPlaceVote,
     GroupPollOption,
     generate_invite_code,
 )
@@ -69,8 +70,11 @@ from backend.schemas import (
     HangoutPollResponse,
     MemberAddRequest,
     MessageResponse,
+    PlaceVoteRequest,
+    PlaceVoteSummary,
     PollOptionCreate,
     PollOptionResponse,
+    PollRecommendationsResponse,
     PollVoteRequest,
     ResendVerificationRequest,
     ResetPasswordRequest,
@@ -79,6 +83,10 @@ from backend.schemas import (
     UserLogin,
     UserResponse,
     UserUpdate,
+)
+from backend.recommendation_service import (
+    geocode_address,
+    get_recommendations_for_poll,
 )
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -599,6 +607,41 @@ def build_poll_response(poll: HangoutPoll, current_user_id: Optional[int] = None
             )
         )
 
+    # Compute place votes and leading place
+    from collections import defaultdict
+    place_vote_map = defaultdict(list)
+    my_place_votes = []
+    for pv in getattr(poll, "place_votes", []):
+        voter_name = pv.user.username if pv.user else ""
+        place_vote_map[pv.place_name].append(voter_name)
+        if current_user_id and pv.user_id == current_user_id:
+            my_place_votes.append(pv.place_name)
+
+    place_votes_resp = []
+    top_places = []
+    max_place_votes = 0
+
+    for p_name, voters in place_vote_map.items():
+        v_count = len(voters)
+        if v_count > max_place_votes:
+            max_place_votes = v_count
+            top_places = [p_name]
+        elif v_count == max_place_votes and v_count > 0:
+            top_places.append(p_name)
+
+        place_votes_resp.append(
+            PlaceVoteSummary(
+                place_name=p_name,
+                count=v_count,
+                voters=voters,
+                has_voted=bool(current_user_id and p_name in my_place_votes),
+            )
+        )
+
+    current_place_text = "Not Yet Decided"
+    if max_place_votes > 0 and top_places:
+        current_place_text = " / ".join(top_places)
+
     return HangoutPollResponse(
         id=poll.id,
         group_id=poll.group_id,
@@ -606,9 +649,12 @@ def build_poll_response(poll: HangoutPoll, current_user_id: Optional[int] = None
         start_time=poll.start_time,
         end_time=poll.end_time,
         place=poll.place,
+        current_place=current_place_text,
         total_votes=total_votes,
         my_vote_option_id=my_vote_option_id,
         options=options_resp,
+        place_votes=place_votes_resp,
+        my_place_votes=my_place_votes,
         created_at=poll.created_at,
     )
 
@@ -965,7 +1011,7 @@ async def cast_hangout_vote(
 @app.post(
     "/api/groups/{group_id}/hangouts/{poll_id}/options",
     response_model=HangoutPollResponse,
-    summary="Group leader adds a custom option to a hangout poll",
+    summary="Group member adds a custom option to a hangout poll",
 )
 async def add_poll_option(
     group_id: int,
@@ -1054,6 +1100,203 @@ async def delete_poll_option(
         )
 
     db.delete(option)
+    db.commit()
+    db.refresh(poll)
+
+    poll_resp = build_poll_response(poll, current_user.id)
+    await ws_manager.broadcast_to_group(group_id, {
+        "type": "POLL_UPDATED",
+        "poll": poll_resp.model_dump(mode="json"),
+    })
+    return poll_resp
+
+
+@app.get(
+    "/api/groups/{group_id}/hangouts/{poll_id}/recommendations",
+    response_model=PollRecommendationsResponse,
+    summary="Get food or entertainment recommendations for a poll based on members' locations and max distance",
+)
+async def get_hangout_recommendations(
+    group_id: int,
+    poll_id: int,
+    category: str = Query("food", pattern="^(food|entertainment)$"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+    user_mem = (
+        db.query(GroupMember)
+        .filter(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id)
+        .first()
+    )
+    if not user_mem:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+
+    poll = (
+        db.query(HangoutPoll)
+        .filter(
+            HangoutPoll.id == poll_id,
+            HangoutPoll.group_id == group_id,
+            HangoutPoll.is_deleted == False,
+        )
+        .first()
+    )
+    if not poll:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hangout poll not found.")
+
+    group_members = (
+        db.query(GroupMember, User)
+        .join(User, GroupMember.user_id == User.id)
+        .filter(GroupMember.group_id == group_id)
+        .all()
+    )
+
+    members_with_coords = []
+    for gm, u in group_members:
+        lat = u.latitude
+        lon = u.longitude
+        if lat is None or lon is None:
+            addr_parts = [p for p in [u.street_address, u.state, u.zip_code] if p]
+            if addr_parts:
+                full_addr = ", ".join(addr_parts)
+                coords = await geocode_address(full_addr)
+                if coords:
+                    lat, lon = coords
+                    u.latitude = lat
+                    u.longitude = lon
+                    u.geocoded_address = full_addr
+                    db.add(u)
+                    db.commit()
+
+        members_with_coords.append({
+            "user_id": u.id,
+            "username": u.username,
+            "full_name": u.full_name,
+            "lat": lat,
+            "lon": lon,
+            "max_travel_distance": u.max_travel_distance or 25,
+        })
+
+    recommendations_data = await get_recommendations_for_poll(
+        poll_id=poll.id,
+        group_id=group.id,
+        category=category,
+        slot_date=poll.date,
+        slot_start=poll.start_time,
+        slot_end=poll.end_time,
+        members_with_coords=members_with_coords,
+    )
+
+    return PollRecommendationsResponse(**recommendations_data)
+
+
+@app.patch(
+    "/api/groups/{group_id}/hangouts/{poll_id}/place",
+    response_model=HangoutPollResponse,
+    summary="Update the hangout poll place",
+)
+async def update_hangout_place(
+    group_id: int,
+    poll_id: int,
+    place_in: PollOptionCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+    user_mem = (
+        db.query(GroupMember)
+        .filter(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id)
+        .first()
+    )
+    if not user_mem:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+
+    poll = (
+        db.query(HangoutPoll)
+        .filter(
+            HangoutPoll.id == poll_id,
+            HangoutPoll.group_id == group_id,
+            HangoutPoll.is_deleted == False,
+        )
+        .first()
+    )
+    if not poll:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hangout poll not found.")
+
+    poll.place = place_in.text.strip()
+    db.commit()
+    db.refresh(poll)
+
+    poll_resp = build_poll_response(poll, current_user.id)
+    await ws_manager.broadcast_to_group(group_id, {
+        "type": "POLL_UPDATED",
+        "poll": poll_resp.model_dump(mode="json"),
+    })
+    return poll_resp
+
+
+@app.post(
+    "/api/groups/{group_id}/hangouts/{poll_id}/place-vote",
+    response_model=HangoutPollResponse,
+    summary="User casts or toggles a Yes vote on a recommendation venue/activity",
+)
+async def vote_hangout_place(
+    group_id: int,
+    poll_id: int,
+    vote_in: PlaceVoteRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+    user_mem = (
+        db.query(GroupMember)
+        .filter(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id)
+        .first()
+    )
+    if not user_mem:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+
+    poll = (
+        db.query(HangoutPoll)
+        .filter(
+            HangoutPoll.id == poll_id,
+            HangoutPoll.group_id == group_id,
+            HangoutPoll.is_deleted == False,
+        )
+        .first()
+    )
+    if not poll:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hangout poll not found.")
+
+    place_name = vote_in.place_name.strip()
+    existing_place_vote = (
+        db.query(HangoutPlaceVote)
+        .filter(
+            HangoutPlaceVote.poll_id == poll_id,
+            HangoutPlaceVote.place_name == place_name,
+            HangoutPlaceVote.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if existing_place_vote:
+        # Toggle off
+        db.delete(existing_place_vote)
+    else:
+        # Cast vote
+        new_vote = HangoutPlaceVote(
+            poll_id=poll.id,
+            place_name=place_name,
+            user_id=current_user.id,
+        )
+        db.add(new_vote)
+
     db.commit()
     db.refresh(poll)
 
@@ -1298,7 +1541,7 @@ def get_me(current_user: User = Depends(get_current_user)):
     response_model=UserResponse,
     summary="Update current user profile",
 )
-def update_profile(
+async def update_profile(
     user_update: UserUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1315,17 +1558,41 @@ def update_profile(
     if user_update.full_name is not None:
         current_user.full_name = user_update.full_name.strip() if user_update.full_name else None
 
+    address_changed = False
     if user_update.street_address is not None:
-        current_user.street_address = user_update.street_address.strip() if user_update.street_address else None
+        new_street = user_update.street_address.strip() if user_update.street_address else None
+        if new_street != current_user.street_address:
+            address_changed = True
+        current_user.street_address = new_street
 
     if user_update.state is not None:
-        current_user.state = user_update.state.strip().upper() if user_update.state else None
+        new_state = user_update.state.strip().upper() if user_update.state else None
+        if new_state != current_user.state:
+            address_changed = True
+        current_user.state = new_state
 
     if user_update.zip_code is not None:
-        current_user.zip_code = user_update.zip_code.strip() if user_update.zip_code else None
+        new_zip = user_update.zip_code.strip() if user_update.zip_code else None
+        if new_zip != current_user.zip_code:
+            address_changed = True
+        current_user.zip_code = new_zip
 
     if user_update.max_travel_distance is not None:
         current_user.max_travel_distance = user_update.max_travel_distance
+
+    if address_changed:
+        addr_parts = [p for p in [current_user.street_address, current_user.state, current_user.zip_code] if p]
+        if addr_parts:
+            full_addr = ", ".join(addr_parts)
+            coords = await geocode_address(full_addr)
+            if coords:
+                current_user.latitude = coords[0]
+                current_user.longitude = coords[1]
+                current_user.geocoded_address = full_addr
+        else:
+            current_user.latitude = None
+            current_user.longitude = None
+            current_user.geocoded_address = None
 
     db.add(current_user)
     db.commit()
