@@ -1547,6 +1547,7 @@ function selectGroupInAvailability(groupId, shouldScroll = false) {
   if (groupAvailEmptyState) groupAvailEmptyState.classList.add("hidden");
   if (groupAvailNoSelection) groupAvailNoSelection.classList.add("hidden");
   if (groupAvailContent) groupAvailContent.classList.remove("hidden");
+  initOrRefreshGroupMap()
   if (availGroupName) availGroupName.textContent = group.name;
   if (availGroupDesc) availGroupDesc.textContent = group.description || "No description provided.";
   const isOwner = state.currentUser && group.owner_id === state.currentUser.id;
@@ -2651,7 +2652,9 @@ window.loadPollRecommendations = async function (category) {
     let data = state.recCache[cacheKey];
     if (!data) {
       const res = await fetch(`/api/groups/${groupId}/hangouts/${pollId}/recommendations?category=${category}`, {
-        headers: { Authorization: `Bearer ${state.token}` },
+        headers: {
+          Authorization: `Bearer ${state.token}`,
+        },
       });
       if (!res.ok) {
         const err = await res.json();
@@ -2663,38 +2666,48 @@ window.loadPollRecommendations = async function (category) {
 
     renderRecommendationsList(data);
   } catch (err) {
+    if (recLoadingSpinner) recLoadingSpinner.classList.add("hidden");
     if (recCardsList) {
       recCardsList.innerHTML = `
         <div style="text-align: center; padding: 2rem 1rem; color: #f87171;">
-          <p>⚠️ ${escapeHtml(err.message)}</p>
-          <button type="button" class="btn-secondary" style="margin-top: 0.5rem; font-size: 0.8rem;" onclick="loadPollRecommendations('${category}')">
-            Retry Search
-          </button>
+          <p style="font-size: 0.9rem;">⚠️ Failed to load options: ${escapeHtml(err.message)}</p>
+          <button type="button" class="btn-refresh" style="margin-top: 0.5rem;" onclick="loadPollRecommendations('${category}')">Try Again</button>
         </div>
       `;
     }
-  } finally {
-    if (recLoadingSpinner) recLoadingSpinner.classList.add("hidden");
   }
 };
 
 function renderRecommendationsList(data) {
-  if (!data || !recCardsList) return;
-  if (recMidpointText) recMidpointText.textContent = data.midpoint_address || "Calculated from members";
+  if (recLoadingSpinner) recLoadingSpinner.classList.add("hidden");
+  if (!recCardsList) return;
 
-  if (data.missing_address_users && data.missing_address_users.length > 0) {
-    if (recMissingAddressWarning) recMissingAddressWarning.classList.remove("hidden");
-    if (recMissingUsersList) recMissingUsersList.textContent = data.missing_address_users.map((u) => `@${u}`).join(", ");
-  } else {
-    if (recMissingAddressWarning) recMissingAddressWarning.classList.add("hidden");
+  // Midpoint display
+  if (recMidpointText && data.midpoint) {
+    recMidpointText.textContent = `Group Midpoint: ${data.midpoint.lat.toFixed(4)}, ${data.midpoint.lon.toFixed(4)}`;
+  } else if (recMidpointText) {
+    recMidpointText.textContent = data.midpoint_address || "Calculated from members";
   }
 
-  // Update Data Source Notice (Mock vs Live)
+  // Missing address warning
+  if (recMissingAddressWarning && recMissingUsersList) {
+    if (data.missing_addresses && data.missing_addresses.length > 0) {
+      recMissingUsersList.textContent = data.missing_addresses.join(", ");
+      recMissingAddressWarning.classList.remove("hidden");
+    } else if (data.missing_address_users && data.missing_address_users.length > 0) {
+      recMissingUsersList.textContent = data.missing_address_users.map((u) => `@${u}`).join(", ");
+      recMissingAddressWarning.classList.remove("hidden");
+    } else {
+      recMissingAddressWarning.classList.add("hidden");
+    }
+  }
+
+  // Source notice: clearly indicate whether live or sample data
   if (recSourceNotice && recSourceText) {
     recSourceNotice.classList.remove("hidden");
-    if (data.is_mock_data) {
-      recSourceNotice.style.background = "rgba(245, 158, 11, 0.09)";
-      recSourceNotice.style.border = "1px solid rgba(245, 158, 11, 0.28)";
+    if (data.is_mock_data || data.is_mock) {
+      recSourceNotice.style.background = "rgba(245, 158, 11, 0.08)";
+      recSourceNotice.style.border = "1px solid rgba(245, 158, 11, 0.25)";
       recSourceNotice.style.color = "#fbbf24";
       if (recSourceIcon) recSourceIcon.textContent = "🧪";
       recSourceText.innerHTML = `<strong>Demo Mode (Sample Data):</strong> Showing simulated verified venues. Live streaming is active when Google Places & Ticketmaster API keys are configured.`;
@@ -2888,6 +2901,62 @@ window.suggestRecommendationToLeader = function (itemTitle) {
   showToast(`"${itemTitle}" suggested! Only group leaders can add options to this poll.`, "info");
 };
 
+// ==================== INTERACTIVE GROUP MAP ====================
+let groupMap = null;
+let meetupPinMarker = null;
+
+function initOrRefreshGroupMap() {
+  const mapEl = document.getElementById("group-interactive-map");
+  if (!mapEl || typeof L === "undefined") return;
+
+  if (!groupMap) {
+    // Centered on Northridge / LA
+    groupMap = L.map("group-interactive-map").setView([34.2381, -118.5277], 11);
+
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(groupMap);
+
+    // Drop a pin when clicking the map
+    groupMap.on("click", (e) => {
+      const { lat, lng } = e.latlng;
+      setMeetupPin(lat, lng, `<strong>Meetup Pin</strong><br><small>${lat.toFixed(4)}, ${lng.toFixed(4)}</small>`);
+    });
+
+    const btnCenterMe = document.getElementById("btn-center-my-location");
+    if (btnCenterMe) {
+      btnCenterMe.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          showToast("Geolocation is not supported by your browser.", "error");
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude } = pos.coords;
+            groupMap.flyTo([latitude, longitude], 13);
+            setMeetupPin(latitude, longitude, "<strong>You are here</strong>");
+          },
+          () => showToast("Could not access your location.", "error")
+        );
+      });
+    }
+  }
+
+  // Fixes gray/cut-off tiles when unhiding the tab
+  setTimeout(() => {
+    groupMap.invalidateSize();
+  }, 150);
+}
+
+function setMeetupPin(lat, lng, labelHtml) {
+  if (!groupMap) return;
+  if (meetupPinMarker) {
+    meetupPinMarker.setLatLng([lat, lng]).setPopupContent(labelHtml).openPopup();
+  } else {
+    meetupPinMarker = L.marker([lat, lng]).addTo(groupMap).bindPopup(labelHtml).openPopup();
+  }
+}
 // Boot application
 switchTab("login");
 checkEmailVerificationParam();
