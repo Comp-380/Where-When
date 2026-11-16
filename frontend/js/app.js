@@ -1547,6 +1547,7 @@ function selectGroupInAvailability(groupId, shouldScroll = false) {
   if (groupAvailEmptyState) groupAvailEmptyState.classList.add("hidden");
   if (groupAvailNoSelection) groupAvailNoSelection.classList.add("hidden");
   if (groupAvailContent) groupAvailContent.classList.remove("hidden");
+  initOrRefreshGroupMap()
   if (availGroupName) availGroupName.textContent = group.name;
   if (availGroupDesc) availGroupDesc.textContent = group.description || "No description provided.";
   const isOwner = state.currentUser && group.owner_id === state.currentUser.id;
@@ -2504,6 +2505,62 @@ if (joinGroupForm) {
   });
 }
 
+// ==================== INTERACTIVE GROUP MAP ====================
+let groupMap = null;
+let meetupPinMarker = null;
+
+function initOrRefreshGroupMap() {
+  const mapEl = document.getElementById("group-interactive-map");
+  if (!mapEl || typeof L === "undefined") return;
+
+  if (!groupMap) {
+    // Centered on Northridge / LA
+    groupMap = L.map("group-interactive-map").setView([34.2381, -118.5277], 11);
+
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(groupMap);
+
+    // Drop a pin when clicking the map
+    groupMap.on("click", (e) => {
+      const { lat, lng } = e.latlng;
+      setMeetupPin(lat, lng, `<strong>Meetup Pin</strong><br><small>${lat.toFixed(4)}, ${lng.toFixed(4)}</small>`);
+    });
+
+    const btnCenterMe = document.getElementById("btn-center-my-location");
+    if (btnCenterMe) {
+      btnCenterMe.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+          showToast("Geolocation is not supported by your browser.", "error");
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude } = pos.coords;
+            groupMap.flyTo([latitude, longitude], 13);
+            setMeetupPin(latitude, longitude, "<strong>You are here</strong>");
+          },
+          () => showToast("Could not access your location.", "error")
+        );
+      });
+    }
+  }
+
+  // Fixes gray/cut-off tiles when unhiding the tab
+  setTimeout(() => {
+    groupMap.invalidateSize();
+  }, 150);
+}
+
+function setMeetupPin(lat, lng, labelHtml) {
+  if (!groupMap) return;
+  if (meetupPinMarker) {
+    meetupPinMarker.setLatLng([lat, lng]).setPopupContent(labelHtml).openPopup();
+  } else {
+    meetupPinMarker = L.marker([lat, lng]).addTo(groupMap).bindPopup(labelHtml).openPopup();
+  }
+}
 // Boot application
 switchTab("login");
 checkEmailVerificationParam();

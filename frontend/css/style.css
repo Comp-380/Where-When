@@ -1164,3 +1164,22 @@ body {
   color: var(--text-muted);
   font-style: italic;
 }
+
+/* Leaflet Dark Theme Overrides */
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--bg-card-solid);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-card);
+}
+
+.leaflet-control-attribution {
+  background: rgba(15, 23, 42, 0.75) !important;
+  color: var(--text-muted) !important;
+  font-size: 0.68rem;
+}
+
+.leaflet-control-attribution a {
+  color: var(--accent) !important;
+}
