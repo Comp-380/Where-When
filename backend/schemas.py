@@ -310,6 +310,13 @@ class UserDistanceInfo(BaseModel):
     max_distance_miles: Optional[int] = None
     is_within_limit: bool
 
+class ActivityReview(BaseModel):
+    """SCRUM-52: Schema for individual activity/venue customer reviews."""
+    author_name: str
+    rating: float = 5.0
+    relative_time: str = "Recently"
+    text: str = ""
+    author_photo_url: Optional[str] = None
 
 class RecommendationItem(BaseModel):
     id: str
@@ -319,7 +326,13 @@ class RecommendationItem(BaseModel):
     subcategory: str = "Venue"
     address: str = ""
     rating: Optional[float] = None
+    user_rating_count: int = 0  # SCRUM-52: Total number of reviews
     price_level: Optional[str] = None
+    # SCRUM-51: Detailed Activity Information fields
+    description: Optional[str] = None
+    phone_number: Optional[str] = None
+    website_url: Optional[str] = None
+    weekday_hours: List[str] = []
     maps_url: Optional[str] = None
     ticket_url: Optional[str] = None
     event_time: Optional[str] = None
@@ -328,6 +341,8 @@ class RecommendationItem(BaseModel):
     avg_distance_miles: float
     all_within_limit: bool = True
     user_distances: List[UserDistanceInfo] = []
+    # SCRUM-52: List of customer reviews
+    reviews: List[ActivityReview] = []
     is_mock: bool = False
     source: str = "Live"
 

@@ -2709,7 +2709,7 @@ function renderRecommendationsList(data) {
       recSourceNotice.style.background = "rgba(245, 158, 11, 0.08)";
       recSourceNotice.style.border = "1px solid rgba(245, 158, 11, 0.25)";
       recSourceNotice.style.color = "#fbbf24";
-      if (recSourceIcon) recSourceIcon.textContent = "🧪";
+      if (recSourceIcon) recSourceIcon.textContent = "⚡";
       recSourceText.innerHTML = `<strong>Demo Mode (Sample Data):</strong> Showing simulated verified venues. Live streaming is active when Google Places & Ticketmaster API keys are configured.`;
     } else {
       recSourceNotice.style.background = "rgba(59, 130, 246, 0.09)";
@@ -2745,7 +2745,7 @@ function renderRecommendationsList(data) {
     }
   }
 
-  recCardsList.innerHTML = items.map((item) => {
+  recCardsList.innerHTML = items.map((item, idx) => {
     const itemTitleLower = item.title.trim().toLowerCase();
     const pvInfo = placeVoteLookup[itemTitleLower];
     const voteCount = pvInfo ? pvInfo.count : 0;
@@ -2755,24 +2755,28 @@ function renderRecommendationsList(data) {
     );
     const votersList = pvInfo && pvInfo.voters && pvInfo.voters.length ? pvInfo.voters.join(", @") : "";
 
-    const ratingStars = item.rating ? `★ ${item.rating.toFixed(1)}` : "";
-    const priceText = item.price_level ? ` • ${item.price_level}` : "";
+    // SCRUM-52: Star Rating & Review Count Summary
+    const reviewsList = Array.isArray(item.reviews) ? item.reviews : [];
+    const totalReviews = item.user_rating_count || reviewsList.length;
+    const ratingStars = item.rating ? `★ ${item.rating.toFixed(1)}` : "★ New";
+    const reviewCountText = totalReviews > 0 ? ` (${totalReviews} reviews)` : "";
+    const priceText = item.price_level ? ` • ${escapeHtml(item.price_level)}` : "";
 
     const openBadge = item.is_open_confirmed
-      ? `<span class="rec-badge-open">🟢 ${escapeHtml(item.open_hours_text || "Verified Open")}</span>`
+      ? `<span class="rec-badge-open">✓ ${escapeHtml(item.open_hours_text || "Verified Open")}</span>`
       : `<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">Hours Unverified</span>`;
 
     const sourceBadge = item.is_mock
-      ? `<span class="rec-badge-mock" title="Sample demo item (API keys not configured)">🧪 Sample / Demo</span>`
-      : `<span class="rec-badge-live" title="Live data verified from ${escapeHtml(item.source || 'API')}">🌐 Live: ${escapeHtml(item.source || 'API')}</span>`;
+      ? `<span class="rec-badge-mock" title="Sample demo item (API keys not configured)">⚡ Sample / Demo</span>`
+      : `<span class="rec-badge-live" title="Live data verified from ${escapeHtml(item.source || 'API')}">● Live: ${escapeHtml(item.source || 'API')}</span>`;
 
     const eventBadge = item.item_type === "event"
-      ? `<span class="rec-badge-event">🎵 ${escapeHtml(item.event_time || "Live Event")}</span>`
+      ? `<span class="rec-badge-event">🎟 ${escapeHtml(item.event_time || "Live Event")}</span>`
       : "";
 
     const commutePills = (item.user_distances || []).map((ud) => {
       const cls = ud.is_within_limit ? "ok" : "exceeded";
-      const icon = ud.is_within_limit ? "✓" : "⚠️";
+      const icon = ud.is_within_limit ? "✓" : "⚠";
       return `
         <span class="rec-commute-pill ${cls}" title="${ud.is_within_limit ? 'Within max travel limit' : `Exceeds max limit (${ud.max_distance_miles} mi)`}">
           ${icon} @${escapeHtml(ud.username)}: ${ud.distance_miles} mi
@@ -2780,15 +2784,83 @@ function renderRecommendationsList(data) {
       `;
     }).join("");
 
-    const externalLink = item.maps_url
-      ? `<a href="${escapeHtml(item.maps_url)}" target="_blank" rel="noopener noreferrer" style="color: var(--accent); font-size: 0.74rem; text-decoration: none; margin-left: 0.5rem;" title="View on Maps">🗺️ Open Map</a>`
-      : "";
+    // SCRUM-51: Activity Information Drawer HTML
+    const infoDrawerId = `rec-info-drawer-${idx}`;
+    const hoursListHtml = (item.weekday_hours && item.weekday_hours.length > 0)
+      ? item.weekday_hours.map((h) => `<div>${escapeHtml(h)}</div>`).join("")
+      : `<div>${escapeHtml(item.open_hours_text || "Open during scheduled hangout window")}</div>`;
 
-    const ticketLink = item.ticket_url
-      ? `<a href="${escapeHtml(item.ticket_url)}" target="_blank" rel="noopener noreferrer" style="color: #fb7185; font-size: 0.74rem; text-decoration: none; margin-left: 0.5rem;" title="Get Tickets">🎟️ Tickets</a>`
-      : "";
+    const infoDrawerHtml = `
+      <div id="${infoDrawerId}" class="rec-drawer-box hidden">
+        <div class="rec-info-grid">
+          <div class="rec-info-row">
+            <span class="rec-info-label">Category & Price</span>
+            <span class="rec-info-val">${escapeHtml(item.category)} (${escapeHtml(item.subcategory)})${priceText}</span>
+          </div>
+          <div class="rec-info-row">
+            <span class="rec-info-label">Address</span>
+            <span class="rec-info-val">${escapeHtml(item.address || "Address on map")}</span>
+          </div>
+          <div class="rec-info-row">
+            <span class="rec-info-label">Phone Number</span>
+            <span class="rec-info-val">
+              ${item.phone_number ? `<a href="tel:${escapeHtml(item.phone_number)}">${escapeHtml(item.phone_number)}</a>` : "Not listed"}
+            </span>
+          </div>
+          <div class="rec-info-row">
+            <span class="rec-info-label">Official Links</span>
+            <span class="rec-info-val" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+              ${item.website_url ? `<a href="${escapeHtml(item.website_url)}" target="_blank" rel="noopener noreferrer">Website ↗</a>` : ""}
+              ${item.maps_url ? `<a href="${escapeHtml(item.maps_url)}" target="_blank" rel="noopener noreferrer">Google Maps ↗</a>` : ""}
+              ${item.ticket_url ? `<a href="${escapeHtml(item.ticket_url)}" target="_blank" rel="noopener noreferrer">Tickets ↗</a>` : ""}
+            </span>
+          </div>
+        </div>
+        <div class="rec-info-row" style="margin-top: 0.55rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.06);">
+          <span class="rec-info-label">Operating Hours</span>
+          <div class="rec-info-val" style="font-size: 0.73rem; color: var(--text-secondary); line-height: 1.4;">
+            ${hoursListHtml}
+          </div>
+        </div>
+      </div>
+    `;
 
-    // Vote button allowing ANY user in the group to vote Yes on this place
+    // SCRUM-52: Activity Reviews Drawer HTML
+    const reviewsDrawerId = `rec-reviews-drawer-${idx}`;
+    const reviewsItemsHtml = reviewsList.length > 0
+      ? reviewsList.map((r) => {
+          const initial = (r.author_name || "U")[0].toUpperCase();
+          const starsVisual = "★".repeat(Math.round(r.rating || 5)) + "☆".repeat(Math.max(0, 5 - Math.round(r.rating || 5)));
+          return `
+            <div class="rec-review-item">
+              <div class="rec-review-header">
+                <span class="rec-reviewer-badge">
+                  <span class="rec-reviewer-avatar">${escapeHtml(initial)}</span>
+                  <span>${escapeHtml(r.author_name)}</span>
+                </span>
+                <span style="font-size: 0.7rem; color: var(--text-muted);">
+                  <span style="color: #fbbf24; margin-right: 0.3rem;">${starsVisual}</span>
+                  ${escapeHtml(r.relative_time || "Recently")}
+                </span>
+              </div>
+              <p style="margin: 0; color: var(--text-secondary); line-height: 1.4;">
+                "${escapeHtml(r.text)}"
+              </p>
+            </div>
+          `;
+        }).join("")
+      : `<p style="margin: 0; color: var(--text-muted); font-style: italic;">No written reviews available for this venue yet.</p>`;
+
+    const reviewsDrawerHtml = `
+      <div id="${reviewsDrawerId}" class="rec-drawer-box hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; padding-bottom: 0.35rem; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <strong style="color: var(--text-main); font-size: 0.78rem;">Customer Reviews (${reviewsList.length} shown)</strong>
+          <span style="color: #fbbf24; font-weight: 700; font-size: 0.76rem;">${ratingStars}${escapeHtml(reviewCountText)}</span>
+        </div>
+        ${reviewsItemsHtml}
+      </div>
+    `;
+
     const voteBtnTitle = votersList ? `Voted by: @${escapeHtml(votersList)}` : (hasVoted ? "Click to remove your vote" : "Vote for this place");
     const voteBtnHtml = `
       <button
@@ -2797,14 +2869,14 @@ function renderRecommendationsList(data) {
         onclick="castPlaceVote(${data.group_id}, ${data.poll_id}, '${escapeHtml(item.title).replace(/'/g, "\\'")}')"
         title="${voteBtnTitle}"
       >
-        <span>${hasVoted ? '👍 Voted Yes' : '👍 Vote Yes'}</span>
+        <span>${hasVoted ? '✓ Voted Yes' : '👍 Vote Yes'}</span>
         <span class="place-vote-count-badge">${voteCount}</span>
       </button>
     `;
 
     return `
       <div class="rec-card">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.4rem; gap: 0.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.3rem; gap: 0.5rem;">
           <div>
             <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
               <strong style="font-size: 0.95rem; color: var(--text-main);">${escapeHtml(item.title)}</strong>
@@ -2813,8 +2885,7 @@ function renderRecommendationsList(data) {
               ${eventBadge}
             </div>
             <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 0.2rem;">
-              <span style="color: #fbbf24; font-weight: 600;">${ratingStars}</span>${priceText} • <span style="color: var(--text-secondary);">${escapeHtml(item.subcategory)}</span>
-              ${externalLink}${ticketLink}
+              <span style="color: #fbbf24; font-weight: 600;">${ratingStars}</span><span style="color: var(--text-muted);">${escapeHtml(reviewCountText)}</span>${priceText} • <span style="color: var(--text-secondary);">${escapeHtml(item.subcategory)}</span>
             </div>
           </div>
           <div style="text-align: right; flex-shrink: 0;">
@@ -2823,15 +2894,31 @@ function renderRecommendationsList(data) {
           </div>
         </div>
 
-        <p style="font-size: 0.76rem; color: var(--text-secondary); margin: 0 0 0.55rem 0;">
-          ${escapeHtml(item.address)}
+        ${item.description ? `<p class="rec-description-text">${escapeHtml(item.description)}</p>` : ""}
+
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0 0 0.5rem 0;">
+          📍 ${escapeHtml(item.address)}
         </p>
+
+        <!-- SCRUM-51 & SCRUM-52 Action Buttons -->
+        <div class="rec-action-bar">
+          <button type="button" class="btn-rec-drawer-toggle" onclick="toggleRecDrawer('${infoDrawerId}', this)">
+            ℹ️ Activity Info
+          </button>
+          <button type="button" class="btn-rec-drawer-toggle" onclick="toggleRecDrawer('${reviewsDrawerId}', this)">
+            💬 Reviews (${reviewsList.length})
+          </button>
+          ${item.maps_url ? `<a href="${escapeHtml(item.maps_url)}" target="_blank" rel="noopener noreferrer" class="btn-rec-drawer-toggle" style="text-decoration: none;">🗺️ Open Map</a>` : ""}
+          ${item.website_url ? `<a href="${escapeHtml(item.website_url)}" target="_blank" rel="noopener noreferrer" class="btn-rec-drawer-toggle" style="text-decoration: none;">🌐 Website</a>` : ""}
+        </div>
+
+        ${infoDrawerHtml}
+        ${reviewsDrawerHtml}
 
         <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-bottom: 0.65rem;">
           <span style="font-size: 0.7rem; color: var(--text-muted); margin-right: 0.2rem;">Commutes:</span>
           ${commutePills}
         </div>
-
         <div style="display: flex; gap: 0.5rem; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.5rem;">
           <span style="font-size: 0.72rem; color: var(--text-muted);">
             ${votersList ? `Voters: @${escapeHtml(votersList)}` : 'No votes yet for this venue'}
@@ -2842,6 +2929,15 @@ function renderRecommendationsList(data) {
     `;
   }).join("");
 }
+
+window.toggleRecDrawer = function (drawerId, btnEl) {
+  const drawer = document.getElementById(drawerId);
+  if (!drawer) return;
+  const isHidden = drawer.classList.toggle("hidden");
+  if (btnEl) {
+    btnEl.classList.toggle("active", !isHidden);
+  }
+};
 
 window.castPlaceVote = async function (groupId, pollId, placeName) {
   if (!state.token) return;

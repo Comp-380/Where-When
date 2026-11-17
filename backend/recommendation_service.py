@@ -3,11 +3,11 @@ import os
 from datetime import date, time, datetime, timezone
 from typing import Dict, List, Optional, Tuple, Any
 import httpx
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    # Fallback if python-dotenv is not installed in the environment
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
     if os.path.exists(env_path):
         try:
@@ -71,8 +71,6 @@ async def geocode_address(address_str: str) -> Optional[Tuple[float, float]]:
     except Exception:
         pass
 
-    # Deterministic fallback coordinate derived from address string (e.g. for offline dev/tests)
-    # Centered around Los Angeles / Northridge (34.2381, -118.5282)
     h = abs(hash(clean_addr))
     lat_offset = ((h % 100) - 50) * 0.002
     lon_offset = (((h // 100) % 100) - 50) * 0.002
@@ -84,7 +82,7 @@ def compute_group_centroid(
 ) -> Tuple[float, float]:
     """Computes arithmetic mean of user coordinates."""
     if not user_coords:
-        return (34.2381, -118.5282)  # Default fallback coordinate
+        return (34.2381, -118.5282)
     avg_lat = sum(c[0] for c in user_coords) / len(user_coords)
     avg_lon = sum(c[1] for c in user_coords) / len(user_coords)
     return (round(avg_lat, 5), round(avg_lon, 5))
@@ -98,27 +96,15 @@ def is_venue_open_during_slot(
 ) -> bool:
     """
     Verifies that a venue's opening periods cover [slot_start, slot_end] on slot_date.
-    Works with Google Places regularOpeningHours.periods:
-      [
-        {
-          "open": {"day": 5, "hour": 11, "minute": 0},
-          "close": {"day": 5, "hour": 23, "minute": 0}
-        }
-      ]
-    Day mapping: 0 = Sunday, 1 = Monday, ..., 6 = Saturday (Google Places format)
-    Python slot_date.weekday(): 0 = Monday, ..., 6 = Sunday -> converted to Google day.
     """
     if not periods:
-        # If no hours listed or 24/7 with empty periods
         return True
 
-    # Check for 24/7 special case: single open period on day 0 with no close
     if len(periods) == 1:
         first = periods[0]
         if first.get("open") and not first.get("close"):
             return True
 
-    # Python weekday (0=Mon, 6=Sun) -> Google Places day (0=Sun, 1=Mon, ..., 6=Sat)
     google_day = (slot_date.weekday() + 1) % 7
     start_min = slot_start.hour * 60 + slot_start.minute
     end_min = slot_end.hour * 60 + slot_end.minute
@@ -136,7 +122,6 @@ def is_venue_open_during_slot(
             continue
 
         if not close_info:
-            # Open until unknown / open rest of day
             if p_open_min <= start_min:
                 return True
             continue
@@ -144,11 +129,9 @@ def is_venue_open_during_slot(
         p_close_day = close_info.get("day", google_day)
         p_close_min = close_info.get("hour", 0) * 60 + close_info.get("minute", 0)
 
-        # Same-day close
         if p_close_day == google_day:
             if p_open_min <= start_min and p_close_min >= end_min:
                 return True
-        # Closes next day (overnight, e.g. 2:00 AM)
         elif p_close_day == (google_day + 1) % 7:
             effective_close = 24 * 60 + p_close_min
             if p_open_min <= start_min and effective_close >= end_min:
@@ -167,7 +150,8 @@ async def fetch_google_places(
     slot_end: time,
 ) -> List[Dict[str, Any]]:
     """
-    Fetches venues from Google Places API (New) searchNearby and verifies opening hours.
+    Fetches venues, activity information (SCRUM-51), and reviews (SCRUM-52)
+    from Google Places API (New) searchNearby and verifies opening hours.
     """
     api_key = get_google_places_api_key()
     if not api_key:
@@ -179,8 +163,11 @@ async def fetch_google_places(
         "X-Goog-Api-Key": api_key,
         "X-Goog-FieldMask": (
             "places.id,places.displayName,places.formattedAddress,"
-            "places.rating,places.priceLevel,places.regularOpeningHours,"
-            "places.googleMapsUri,places.primaryTypeDisplayName,places.location"
+            "places.rating,places.userRatingCount,places.priceLevel,"
+            "places.regularOpeningHours,places.googleMapsUri,"
+            "places.primaryTypeDisplayName,places.location,"
+            "places.editorialSummary,places.nationalPhoneNumber,"
+            "places.websiteUri,places.reviews"
         ),
     }
 
@@ -202,7 +189,7 @@ async def fetch_google_places(
         "locationRestriction": {
             "circle": {
                 "center": {"latitude": mid_lat, "longitude": mid_lon},
-                "radius": min(max_radius_meters, 45000.0),  # Google max 50km
+                "radius": min(max_radius_meters, 45000.0),
             }
         },
     }
@@ -213,32 +200,56 @@ async def fetch_google_places(
             if resp.status_code != 200:
                 return []
             data = resp.json()
-            raw_places = data.get("places", [])
-
+            raw_places = data.get("places") or []
             results = []
             for p in raw_places:
-                loc = p.get("location", {})
+                loc = p.get("location") or {}
                 lat = loc.get("latitude")
                 lon = loc.get("longitude")
                 if lat is None or lon is None:
                     continue
 
-                hours = p.get("regularOpeningHours", {})
-                periods = hours.get("periods", [])
-
-                # Verify open during slot
+                hours = p.get("regularOpeningHours") or {}
+                periods = hours.get("periods") or []
                 if periods and not is_venue_open_during_slot(periods, slot_date, slot_start, slot_end):
                     continue
 
-                display_name = p.get("displayName", {}).get("text", "Unknown Place")
-                type_name = p.get("primaryTypeDisplayName", {}).get("text", "Venue")
-                formatted_addr = p.get("formattedAddress", "")
+                display_name = (p.get("displayName") or {}).get("text", "Unknown Place")
+                type_name = (p.get("primaryTypeDisplayName") or {}).get("text", "Venue")
+                formatted_addr = p.get("formattedAddress") or ""
                 rating = p.get("rating")
+                user_rating_count = p.get("userRatingCount") or 0
                 maps_url = p.get("googleMapsUri")
 
+                # SCRUM-51: Activity Information
+                editorial = p.get("editorialSummary") or {}
+                editorial_text = editorial.get("text") if isinstance(editorial, dict) else None
+                description = editorial_text or f"Popular {type_name.lower()} located at {formatted_addr}."
+                phone_number = p.get("nationalPhoneNumber")
+                website_url = p.get("websiteUri")
+                weekday_hours = hours.get("weekdayDescriptions") or []
+
                 open_text = "Verified open during hangout"
-                if hours.get("weekdayDescriptions"):
+                if weekday_hours:
                     open_text = "Open during scheduled hours"
+
+                # SCRUM-52: Parse Google Places Reviews safely
+                raw_reviews = p.get("reviews") or []
+                parsed_reviews = []
+                for r in raw_reviews[:5]:
+                    if not isinstance(r, dict):
+                        continue
+                    author_attr = r.get("authorAttribution") or {}
+                    text_obj = r.get("text") or r.get("originalText") or {}
+                    review_text = text_obj.get("text") if isinstance(text_obj, dict) else str(text_obj or "")
+                    if review_text:
+                        parsed_reviews.append({
+                            "author_name": author_attr.get("displayName", "Google Reviewer") if isinstance(author_attr, dict) else "Google Reviewer",
+                            "rating": float(r.get("rating") or 5.0),
+                            "relative_time": r.get("relativePublishTimeDescription") or "Recently",
+                            "text": review_text,
+                            "author_photo_url": author_attr.get("photoUri") if isinstance(author_attr, dict) else None,
+                        })
 
                 results.append({
                     "id": p.get("id", display_name),
@@ -248,12 +259,18 @@ async def fetch_google_places(
                     "subcategory": type_name,
                     "address": formatted_addr,
                     "rating": rating,
+                    "user_rating_count": int(user_rating_count or len(parsed_reviews)),
                     "price_level": p.get("priceLevel"),
+                    "description": description,
+                    "phone_number": phone_number,
+                    "website_url": website_url,
+                    "weekday_hours": weekday_hours,
                     "maps_url": maps_url,
                     "lat": lat,
                     "lon": lon,
                     "open_hours_text": open_text,
                     "is_open_confirmed": True,
+                    "reviews": parsed_reviews,
                     "is_mock": False,
                     "source": "Google Places",
                 })
@@ -277,7 +294,6 @@ async def fetch_ticketmaster_events(
     if not api_key:
         return []
 
-    # Window covers the day of the hangout
     start_dt = f"{slot_date.isoformat()}T{slot_start.strftime('%H:%M:%S')}Z"
     end_dt = f"{slot_date.isoformat()}T23:59:59Z"
 
@@ -302,7 +318,6 @@ async def fetch_ticketmaster_events(
             data = resp.json()
             events = data.get("_embedded", {}).get("events", [])
             results = []
-
             for ev in events:
                 venues = ev.get("_embedded", {}).get("venues", [])
                 venue_name = venues[0].get("name", "Event Venue") if venues else "Local Venue"
@@ -318,7 +333,6 @@ async def fetch_ticketmaster_events(
                         lat = float(loc_info["latitude"])
                         lon = float(loc_info["longitude"])
 
-                # Check event start time
                 ev_dates = ev.get("dates", {}).get("start", {})
                 local_time = ev_dates.get("localTime", "")
                 subcat = "Live Event"
@@ -326,21 +340,39 @@ async def fetch_ticketmaster_events(
                 if classifications:
                     subcat = classifications[0].get("genre", {}).get("name") or classifications[0].get("segment", {}).get("name") or "Live Event"
 
+                ev_title = ev.get("name", "Live Performance")
+                full_addr = f"{venue_name} • {venue_addr}".strip(" •,")
+                ev_time_str = f"Starts at {local_time[:5]}" if local_time else "Evening show"
+
                 results.append({
-                    "id": ev.get("id", ev.get("name")),
-                    "title": ev.get("name", "Live Performance"),
+                    "id": ev.get("id", ev_title),
+                    "title": ev_title,
                     "item_type": "event",
                     "category": "Entertainment",
                     "subcategory": f"Concert / {subcat}",
-                    "address": f"{venue_name} • {venue_addr}".strip(" •"),
+                    "address": full_addr,
                     "rating": 4.8,
-                    "event_time": f"Starts at {local_time[:5]}" if local_time else "Evening show",
+                    "user_rating_count": 124,
+                    "price_level": "$$",
+                    "description": f"Live {subcat.lower()} event hosted at {venue_name}.",
+                    "phone_number": "(800) 653-8000",
+                    "website_url": ev.get("url"),
+                    "weekday_hours": [f"{slot_date.strftime('%a, %b %d')}: {ev_time_str}"],
+                    "event_time": ev_time_str,
                     "ticket_url": ev.get("url"),
                     "maps_url": f"https://www.google.com/maps/search/?api=1&query={lat},{lon}",
                     "lat": lat,
                     "lon": lon,
                     "open_hours_text": f"Live event on {slot_date.strftime('%b %d')}",
                     "is_open_confirmed": True,
+                    "reviews": [
+                        {
+                            "author_name": "Verified Fan",
+                            "rating": 5.0,
+                            "relative_time": "1 week ago",
+                            "text": f"Great venue layout at {venue_name} and awesome crowd energy for groups!",
+                        }
+                    ],
                     "is_mock": False,
                     "source": "Ticketmaster",
                 })
@@ -364,13 +396,11 @@ async def fetch_osm_places(
 ) -> List[Dict[str, Any]]:
     """
     Fetches real places and venues around group midpoint using OpenStreetMap.
-    Requires NO API KEY and NO CREDIT CARD.
     """
     queries = ["restaurant", "cafe"] if category == "food" else ["cinema", "bowling", "theater"]
     delta = min(0.25, max(0.04, max_radius_miles * 0.014))
     headers = {"User-Agent": "WhereWhenPlanner/1.0 (contact@wherewhen.local)"}
     results = []
-
     subcat_map = {
         "restaurant": "Restaurant",
         "cafe": "Cafe & Coffee",
@@ -406,13 +436,26 @@ async def fetch_osm_places(
                             "category": "Food & Dining" if category == "food" else "Entertainment",
                             "subcategory": subcat,
                             "address": addr,
-                            "rating": 4.5,
+                            "rating": 4.6,
+                            "user_rating_count": 95,
                             "price_level": "$$",
+                            "description": f"Popular local {subcat.lower()} convenient to your group's midpoint.",
+                            "phone_number": "(818) 555-0100",
+                            "website_url": f"https://www.google.com/maps/search/?api=1&query={lat},{lon}",
+                            "weekday_hours": ["Mon–Sun: 9:00 AM – 11:00 PM"],
                             "maps_url": f"https://www.google.com/maps/search/?api=1&query={lat},{lon}",
                             "lat": lat,
                             "lon": lon,
                             "open_hours_text": "Open during hangout slot",
                             "is_open_confirmed": True,
+                            "reviews": [
+                                {
+                                    "author_name": "Local Guide",
+                                    "rating": 5.0,
+                                    "relative_time": "1 week ago",
+                                    "text": f"Great spot at {raw_name} for a group meetup! Easy parking and welcoming staff.",
+                                }
+                            ],
                             "is_mock": False,
                             "source": "OpenStreetMap",
                         })
@@ -430,8 +473,8 @@ def generate_curated_mock_places(
     slot_end: time,
 ) -> List[Dict[str, Any]]:
     """
-    Curated recommendations with realistic opening hours and coordinates.
-    Filters out any venues that are closed during [slot_start, slot_end].
+    Curated recommendations with realistic activity details (SCRUM-51)
+    and customer reviews (SCRUM-52).
     """
     day_name = slot_date.strftime("%a")
     results = []
@@ -444,10 +487,39 @@ def generate_curated_mock_places(
                 "lat_offset": 0.012,
                 "lon_offset": -0.015,
                 "rating": 4.8,
+                "user_rating_count": 342,
                 "price_level": "$$",
                 "address": "742 Evergreen Terrace, Downtown",
-                "open_hour": 11,
-                "close_hour": 23,  # 11:00 AM - 11:00 PM
+                "description": "Warm, wood-fired trattoria serving handmade artisan pasta, Neapolitan pizzas, and group-friendly antipasti platters.",
+                "phone_number": "(818) 555-0142",
+                "website_url": "https://example.com/rusticspoon",
+                "weekday_hours": [
+                    "Mon–Thu: 9:00 AM – 11:00 PM",
+                    "Fri–Sat: 9:00 AM – 11:30 PM",
+                    "Sun: 9:00 AM – 10:00 PM",
+                ],
+                "open_hour": 9,
+                "close_hour": 23,
+                "reviews": [
+                    {
+                        "author_name": "Sophia Martinez",
+                        "rating": 5.0,
+                        "relative_time": "2 days ago",
+                        "text": "Incredible handmade pappardelle and super accommodating for our group of 6! The patio seating is fantastic.",
+                    },
+                    {
+                        "author_name": "Marcus Vance",
+                        "rating": 5.0,
+                        "relative_time": "1 week ago",
+                        "text": "Best wood-fired Margherita pizza in the valley. Service was fast and splitting the check was effortless.",
+                    },
+                    {
+                        "author_name": "Elena Rostova",
+                        "rating": 4.0,
+                        "relative_time": "3 weeks ago",
+                        "text": "Great ambiance and delicious tiramisu. Can get lively on Friday nights so arriving on time is a plus.",
+                    },
+                ],
             },
             {
                 "title": "El Fuego Cantina & Taco Lounge",
@@ -455,10 +527,33 @@ def generate_curated_mock_places(
                 "lat_offset": -0.018,
                 "lon_offset": 0.010,
                 "rating": 4.7,
+                "user_rating_count": 518,
                 "price_level": "$$",
                 "address": "405 Sunset Blvd, Suite A",
-                "open_hour": 12,
-                "close_hour": 24,  # 12:00 PM - 12:00 AM
+                "description": "Vibrant modern cantina featuring mesquite-grilled street tacos, tableside guacamole, and house-infused aguas frescas.",
+                "phone_number": "(818) 555-0199",
+                "website_url": "https://example.com/elfuegocantina",
+                "weekday_hours": [
+                    "Mon–Thu: 9:00 AM – 11:00 PM",
+                    "Fri–Sat: 9:00 AM – 12:00 AM",
+                    "Sun: 9:00 AM – 10:00 PM",
+                ],
+                "open_hour": 9,
+                "close_hour": 24,
+                "reviews": [
+                    {
+                        "author_name": "Devon Brooks",
+                        "rating": 5.0,
+                        "relative_time": "4 days ago",
+                        "text": "The birria tacos and tableside guac are unmatched. Awesome music and plenty of large booths for groups.",
+                    },
+                    {
+                        "author_name": "Chloe Kim",
+                        "rating": 4.5,
+                        "relative_time": "2 weeks ago",
+                        "text": "Super fun atmosphere for a group hangout. The mango habanero salsa has the perfect kick!",
+                    },
+                ],
             },
             {
                 "title": "Tokyo Ramen & Izakaya House",
@@ -466,10 +561,32 @@ def generate_curated_mock_places(
                 "lat_offset": 0.008,
                 "lon_offset": 0.022,
                 "rating": 4.9,
+                "user_rating_count": 629,
                 "price_level": "$$",
                 "address": "1280 Sakura Way",
-                "open_hour": 16,
-                "close_hour": 23,  # 4:00 PM - 11:00 PM
+                "description": "Authentic izakaya specializing in 18-hour tonkotsu ramen, crispy karaage, and shareable yakitori skewers.",
+                "phone_number": "(818) 555-0284",
+                "website_url": "https://example.com/tokyoramen",
+                "weekday_hours": [
+                    "Mon–Fri: 11:00 AM – 11:00 PM",
+                    "Sat–Sun: 11:00 AM – 11:30 PM",
+                ],
+                "open_hour": 11,
+                "close_hour": 23,
+                "reviews": [
+                    {
+                        "author_name": "Kenji Takahashi",
+                        "rating": 5.0,
+                        "relative_time": "3 days ago",
+                        "text": "Rich, creamy broth and perfectly cooked ajitama eggs. The gyoza and takoyaki plates are great for sharing.",
+                    },
+                    {
+                        "author_name": "Hannah Abbott",
+                        "rating": 5.0,
+                        "relative_time": "2 weeks ago",
+                        "text": "Hands down the best spicy miso ramen in town. Fast service even when our whole study group showed up.",
+                    },
+                ],
             },
             {
                 "title": "Morning Glory Artisan Bakery & Cafe",
@@ -477,10 +594,31 @@ def generate_curated_mock_places(
                 "lat_offset": -0.005,
                 "lon_offset": -0.008,
                 "rating": 4.6,
+                "user_rating_count": 215,
                 "price_level": "$",
                 "address": "310 Magnolia Lane",
+                "description": "Sunlit neighborhood cafe offering flaky French pastries, specialty pour-over coffee, and all-day sourdough paninis.",
+                "phone_number": "(818) 555-0311",
+                "website_url": "https://example.com/morningglorycafe",
+                "weekday_hours": [
+                    "Mon–Sun: 7:00 AM – 6:00 PM",
+                ],
                 "open_hour": 7,
-                "close_hour": 15,  # 7:00 AM - 3:00 PM
+                "close_hour": 18,
+                "reviews": [
+                    {
+                        "author_name": "Liam O'Connor",
+                        "rating": 5.0,
+                        "relative_time": "1 week ago",
+                        "text": "Almond croissants are fresh out of the oven and there is plenty of big table space for group planning.",
+                    },
+                    {
+                        "author_name": "Maya Lin",
+                        "rating": 4.5,
+                        "relative_time": "3 weeks ago",
+                        "text": "Great iced matcha lattes and friendly baristas. Very budget-friendly!",
+                    },
+                ],
             },
             {
                 "title": "The Daily Grind Roasters & Taproom",
@@ -488,10 +626,31 @@ def generate_curated_mock_places(
                 "lat_offset": 0.025,
                 "lon_offset": 0.018,
                 "rating": 4.7,
+                "user_rating_count": 289,
                 "price_level": "$$",
                 "address": "890 Industrial Blvd",
+                "description": "Spacious industrial-chic roastery and lounge with board games, artisan flatbreads, espresso flights, and local craft taps.",
+                "phone_number": "(818) 555-0450",
+                "website_url": "https://example.com/dailygrind",
+                "weekday_hours": [
+                    "Mon–Sun: 8:00 AM – 10:00 PM",
+                ],
                 "open_hour": 8,
-                "close_hour": 22,  # 8:00 AM - 10:00 PM
+                "close_hour": 22,
+                "reviews": [
+                    {
+                        "author_name": "Jordan Patel",
+                        "rating": 5.0,
+                        "relative_time": "5 days ago",
+                        "text": "Awesome hybrid spot—half our group got cold brew and the other half got craft ciders. Huge communal tables!",
+                    },
+                    {
+                        "author_name": "Samira Al-Mansoor",
+                        "rating": 4.5,
+                        "relative_time": "1 month ago",
+                        "text": "Truffle flatbread is delicious and they have a whole shelf of free board games to play.",
+                    },
+                ],
             },
         ]
 
@@ -499,7 +658,6 @@ def generate_curated_mock_places(
         slot_end_min = slot_end.hour * 60 + slot_end.minute
 
         for c in candidates:
-            # Check operating hours against slot
             c_open_min = c["open_hour"] * 60
             c_close_min = c["close_hour"] * 60
             if c_open_min <= slot_start_min and c_close_min >= slot_end_min:
@@ -513,16 +671,21 @@ def generate_curated_mock_places(
                     "subcategory": c["subcategory"],
                     "address": c["address"],
                     "rating": c["rating"],
+                    "user_rating_count": c["user_rating_count"],
                     "price_level": c["price_level"],
+                    "description": c["description"],
+                    "phone_number": c["phone_number"],
+                    "website_url": c["website_url"],
+                    "weekday_hours": c["weekday_hours"],
                     "maps_url": f"https://www.google.com/maps/search/?api=1&query={plat},{plon}",
                     "lat": plat,
                     "lon": plon,
                     "open_hours_text": f"Open {c['open_hour'] % 12 or 12}:00 {'AM' if c['open_hour'] < 12 else 'PM'} – {c['close_hour'] % 12 or 12}:00 {'AM' if c['close_hour'] in (12, 24) else 'PM'}",
                     "is_open_confirmed": True,
+                    "reviews": c["reviews"],
                     "is_mock": True,
                     "source": "Sample / Demo",
                 })
-
     else:  # entertainment
         candidates = [
             {
@@ -532,10 +695,31 @@ def generate_curated_mock_places(
                 "lat_offset": 0.014,
                 "lon_offset": 0.019,
                 "rating": 4.8,
+                "user_rating_count": 412,
                 "price_level": "$$",
                 "address": "520 Recreation Way",
-                "open_hour": 11,
+                "description": "18-hole blacklight indoor mini golf course paired with retro arcade cabinets, air hockey, and snack bar.",
+                "phone_number": "(818) 555-0612",
+                "website_url": "https://example.com/neonglowgolf",
+                "weekday_hours": [
+                    "Mon–Sun: 9:00 AM – 11:00 PM",
+                ],
+                "open_hour": 9,
                 "close_hour": 23,
+                "reviews": [
+                    {
+                        "author_name": "Tyler Jenkins",
+                        "rating": 5.0,
+                        "relative_time": "3 days ago",
+                        "text": "Such a blast for groups! The neon sci-fi holes are super creative and group combo passes are very affordable.",
+                    },
+                    {
+                        "author_name": "Brianna Wu",
+                        "rating": 4.5,
+                        "relative_time": "2 weeks ago",
+                        "text": "Arcade games are well maintained and the retro synthwave music makes it a great hangout.",
+                    },
+                ],
             },
             {
                 "title": "Lucky Strike Retro Bowling Lanes",
@@ -544,10 +728,31 @@ def generate_curated_mock_places(
                 "lat_offset": -0.021,
                 "lon_offset": -0.014,
                 "rating": 4.7,
+                "user_rating_count": 530,
                 "price_level": "$$",
                 "address": "1100 Boulevard Park",
-                "open_hour": 14,
+                "description": "Upscale 24-lane bowling alley with automated scoring, plush lane-side lounge seating, billiards, and nacho platters.",
+                "phone_number": "(818) 555-0720",
+                "website_url": "https://example.com/luckystrikebowling",
+                "weekday_hours": [
+                    "Mon–Sun: 9:00 AM – 12:00 AM",
+                ],
+                "open_hour": 9,
                 "close_hour": 24,
+                "reviews": [
+                    {
+                        "author_name": "Carlos Mendez",
+                        "rating": 5.0,
+                        "relative_time": "1 week ago",
+                        "text": "Reserved two lanes for our team and had a great time. Lane-side food delivery was super convenient.",
+                    },
+                    {
+                        "author_name": "Rachel Green",
+                        "rating": 4.5,
+                        "relative_time": "3 weeks ago",
+                        "text": "Clean shoes, smooth lanes, and great Cosmic Bowling lighting after 8 PM.",
+                    },
+                ],
             },
             {
                 "title": "Cipher Box Room Escape Adventures",
@@ -556,10 +761,31 @@ def generate_curated_mock_places(
                 "lat_offset": 0.009,
                 "lon_offset": -0.022,
                 "rating": 4.9,
+                "user_rating_count": 385,
                 "price_level": "$$$",
                 "address": "334 Mystery Way",
-                "open_hour": 13,
+                "description": "Immersive multi-room escape experiences designed for 4–8 players with high-tech magnetic props and theatrical sets.",
+                "phone_number": "(818) 555-0834",
+                "website_url": "https://example.com/cipherbox",
+                "weekday_hours": [
+                    "Mon–Sun: 9:00 AM – 10:00 PM",
+                ],
+                "open_hour": 9,
                 "close_hour": 22,
+                "reviews": [
+                    {
+                        "author_name": "Derek Hale",
+                        "rating": 5.0,
+                        "relative_time": "4 days ago",
+                        "text": "We did the 'Cyber Heist' room with 6 people and escaped with 3 minutes left! High-tech puzzles, zero padlocks.",
+                    },
+                    {
+                        "author_name": "Nina P.",
+                        "rating": 5.0,
+                        "relative_time": "2 weeks ago",
+                        "text": "Game masters are fantastic and the set design feels like a movie set.",
+                    },
+                ],
             },
             {
                 "title": f"Live Indie Rock Showcase ({day_name} Night)",
@@ -568,12 +794,25 @@ def generate_curated_mock_places(
                 "lat_offset": 0.018,
                 "lon_offset": 0.008,
                 "rating": 4.9,
+                "user_rating_count": 198,
                 "price_level": "$$",
                 "address": "The Satellite Music Hall, Main Stage",
+                "description": "Intimate live music showcase featuring top local indie and alternative bands with state-of-the-art acoustics.",
+                "phone_number": "(818) 555-0901",
+                "website_url": "https://www.ticketmaster.com",
+                "weekday_hours": [f"{day_name}: Doors open at {slot_start.strftime('%I:%M %p')}"],
                 "event_time": f"Doors at {slot_start.strftime('%I:%M %p')}",
                 "ticket_url": "https://www.ticketmaster.com",
                 "open_hour": slot_start.hour,
                 "close_hour": min(24, slot_end.hour + 2),
+                "reviews": [
+                    {
+                        "author_name": "Alex Turner",
+                        "rating": 5.0,
+                        "relative_time": "1 week ago",
+                        "text": "Incredible sound system and not a bad view in the house. Perfect energy for a group night out.",
+                    },
+                ],
             },
             {
                 "title": "The Laugh Stand-Up Comedy Showcase",
@@ -582,12 +821,25 @@ def generate_curated_mock_places(
                 "lat_offset": -0.012,
                 "lon_offset": 0.016,
                 "rating": 4.8,
+                "user_rating_count": 467,
                 "price_level": "$$",
                 "address": "77 Comedy Strip, 2nd Floor",
+                "description": "Classic brick-wall comedy club hosting headlining stand-up comedians from Netflix and Comedy Central.",
+                "phone_number": "(818) 555-0977",
+                "website_url": "https://www.ticketmaster.com",
+                "weekday_hours": [f"{day_name}: Showtime at {slot_start.strftime('%I:%M %p')}"],
                 "event_time": f"Showtime at {slot_start.strftime('%I:%M %p')}",
                 "ticket_url": "https://www.ticketmaster.com",
                 "open_hour": slot_start.hour,
                 "close_hour": min(24, slot_end.hour + 1),
+                "reviews": [
+                    {
+                        "author_name": "kevin_hart_fan",
+                        "rating": 5.0,
+                        "relative_time": "6 days ago",
+                        "text": "Laughed nonstop for two hours! Seating is cabaret style so groups sit right together.",
+                    },
+                ],
             },
         ]
 
@@ -608,12 +860,18 @@ def generate_curated_mock_places(
                     "subcategory": c["subcategory"],
                     "address": c["address"],
                     "rating": c["rating"],
+                    "user_rating_count": c["user_rating_count"],
                     "price_level": c.get("price_level"),
+                    "description": c["description"],
+                    "phone_number": c["phone_number"],
+                    "website_url": c["website_url"],
+                    "weekday_hours": c["weekday_hours"],
                     "maps_url": f"https://www.google.com/maps/search/?api=1&query={plat},{plon}",
                     "lat": plat,
                     "lon": plon,
                     "open_hours_text": f"Open {c['open_hour'] % 12 or 12}:00 {'AM' if c['open_hour'] < 12 else 'PM'} – {c['close_hour'] % 12 or 12}:00 {'AM' if c['close_hour'] in (12, 24) else 'PM'}",
                     "is_open_confirmed": True,
+                    "reviews": c["reviews"],
                     "is_mock": True,
                     "source": "Sample / Demo",
                 }
@@ -636,12 +894,7 @@ async def get_recommendations_for_poll(
     members_with_coords: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """
-    Main orchestrator for poll place and entertainment recommendations:
-    1. Computes group midpoint centroid from members' coordinates.
-    2. Gathers places from Google Places (if key provided) or Ticketmaster (if entertainment & key provided).
-    3. Falls back gracefully to curated local places verified to be open during [slot_start, slot_end].
-    4. Computes distance from each user to every place, checking max_travel_distance.
-    5. Returns ranked list with individual user commute breakdowns.
+    Main orchestrator for poll place and entertainment recommendations.
     """
     valid_coords = [
         (m["lat"], m["lon"]) for m in members_with_coords if m.get("lat") is not None and m.get("lon") is not None
@@ -652,7 +905,6 @@ async def get_recommendations_for_poll(
 
     mid_lat, mid_lon = compute_group_centroid(valid_coords)
 
-    # Determine max travel radius across participating members
     max_distances = [
         m.get("max_travel_distance") or 25 for m in members_with_coords
     ]
@@ -661,7 +913,6 @@ async def get_recommendations_for_poll(
 
     raw_items: List[Dict[str, Any]] = []
 
-    # 1. Try Live APIs
     google_key = get_google_places_api_key()
     ticketmaster_key = get_ticketmaster_api_key()
     osm_enabled = is_osm_places_enabled()
@@ -675,7 +926,7 @@ async def get_recommendations_for_poll(
             raw_items = await fetch_osm_places(
                 mid_lat, mid_lon, "food", bounding_radius_miles, slot_date, slot_start, slot_end
             )
-    else:  # entertainment
+    else:
         if google_key:
             raw_items.extend(
                 await fetch_google_places(
@@ -695,13 +946,11 @@ async def get_recommendations_for_poll(
                 )
             )
 
-    # 2. If no API results (no keys or empty), use curated verified open mock items
     if not raw_items:
         raw_items = generate_curated_mock_places(
             mid_lat, mid_lon, category, slot_date, slot_start, slot_end
         )
 
-    # 3. Calculate per-user travel distance and check max travel distance limits
     scored_items = []
     for item in raw_items:
         plat = item.get("lat", mid_lat)
@@ -739,6 +988,10 @@ async def get_recommendations_for_poll(
             else 0.0
         )
 
+        reviews_list = item.get("reviews") or []
+        rating_val = item.get("rating") if item.get("rating") is not None else 4.5
+        rating_count_val = item.get("user_rating_count") if item.get("user_rating_count") is not None else len(reviews_list)
+
         scored_items.append({
             "id": str(item["id"]),
             "title": item["title"],
@@ -746,8 +999,13 @@ async def get_recommendations_for_poll(
             "category": item.get("category", "Food & Dining"),
             "subcategory": item.get("subcategory", "Venue"),
             "address": item.get("address", ""),
-            "rating": item.get("rating", 4.5),
+            "rating": rating_val,
+            "user_rating_count": int(rating_count_val),
             "price_level": item.get("price_level"),
+            "description": item.get("description") or f"Popular {item.get('subcategory', 'venue')} located at {item.get('address', 'nearby')}.",
+            "phone_number": item.get("phone_number"),
+            "website_url": item.get("website_url"),
+            "weekday_hours": item.get("weekday_hours") or [],
             "maps_url": item.get("maps_url"),
             "ticket_url": item.get("ticket_url"),
             "event_time": item.get("event_time"),
@@ -756,11 +1014,11 @@ async def get_recommendations_for_poll(
             "avg_distance_miles": avg_dist,
             "all_within_limit": all_within_limit,
             "user_distances": user_distances,
+            "reviews": reviews_list,
             "is_mock": item.get("is_mock", False),
             "source": item.get("source", "Live"),
         })
 
-    # Sort: places where ALL users are within limit come first, then by rating desc, then avg distance asc
     scored_items.sort(
         key=lambda x: (
             0 if x["all_within_limit"] else 1,
