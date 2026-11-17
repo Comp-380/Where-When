@@ -1809,7 +1809,7 @@
         <div id="rec-midpoint-banner" style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; margin-bottom: 0.5rem; font-size: 0.78rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.4rem;">
             <span>📍 <strong>Group Midpoint:</strong> <span id="rec-midpoint-text">Calculating...</span></span>
-            <span style="color: #34d399; font-weight: 500;">✓ Filtered by each user's max travel limit</span>
+            <span id="rec-limit-status-pill" style="color: #34d399; font-weight: 500;">✓ Filtered within all members' limits</span>
           </div>
           <div id="rec-missing-address-warning" class="hidden" style="margin-top: 0.4rem; color: #fbbf24; font-size: 0.74rem;">
             ⚠️ Some members haven't set their address in Profile: <span id="rec-missing-users-list"></span>. Estimated from group center.
@@ -1855,7 +1855,7 @@
                 <option value="50">Within 50 miles</option>
               </select>
               <label style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: var(--text-secondary); cursor: pointer; user-select: none;">
-                <input type="checkbox" id="rec-within-limits-check" onchange="applyRecFilterChange()" />
+                <input type="checkbox" id="rec-within-limits-check" checked onchange="applyRecFilterChange()" />
                 In All Limits
               </label>
             </div>

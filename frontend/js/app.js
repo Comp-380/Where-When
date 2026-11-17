@@ -2581,8 +2581,14 @@ state.recCache = {};
 state.recFilters = {
   budget: "all",
   maxDistance: null,
-  withinLimitsOnly: false,
+  withinLimitsOnly: true,
   sortBy: "recommended",
+};
+
+window.toggleWithinLimitsFilter = function (val) {
+  if (recWithinLimitsCheck) recWithinLimitsCheck.checked = Boolean(val);
+  if (state.recFilters) state.recFilters.withinLimitsOnly = Boolean(val);
+  applyRecFilters();
 };
 
 window.setRecBudgetFilter = function (budgetVal, btnEl) {
@@ -2639,6 +2645,12 @@ window.openRecommendationsModal = async function (pollId, groupId, dateStr, star
       currentPlace: effectivePlace,
     };
     state.activeRecCategory = "food";
+    if (state.recFilters) {
+      state.recFilters.withinLimitsOnly = true;
+    }
+    if (recWithinLimitsCheck) {
+      recWithinLimitsCheck.checked = true;
+    }
 
     if (recModalSlotInfo) {
       const formattedDate = effectiveDate ? formatDatePretty(effectiveDate) : "";
@@ -2766,6 +2778,18 @@ function renderRecommendationsList(data) {
     }
   }
 
+  // Status pill: clearly show whether strict limit filtering is active
+  const limitStatusPill = document.getElementById("rec-limit-status-pill");
+  if (limitStatusPill) {
+    if (state.recFilters && state.recFilters.withinLimitsOnly) {
+      limitStatusPill.textContent = "✓ Filtered within all members' limits";
+      limitStatusPill.style.color = "#34d399";
+    } else {
+      limitStatusPill.textContent = "⚠️ Showing options exceeding some limits";
+      limitStatusPill.style.color = "#fbbf24";
+    }
+  }
+
   // Raw items from server
   const rawItems = (data.items || []).slice();
 
@@ -2816,12 +2840,29 @@ function renderRecommendationsList(data) {
   }
 
   if (items.length === 0) {
-    recCardsList.innerHTML = `
-      <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
-        <p style="font-size: 0.95rem; margin-bottom: 0.4rem;">No matching venues found for these budget and distance filters.</p>
-        <p style="font-size: 0.78rem;">Try selecting "All Budgets" or choosing a wider distance radius.</p>
-      </div>
-    `;
+    const hasExceededItems = rawItems.some((item) => !item.all_within_limit);
+    if (state.recFilters && state.recFilters.withinLimitsOnly && hasExceededItems) {
+      recCardsList.innerHTML = `
+        <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
+          <p style="font-size: 1rem; margin-bottom: 0.4rem; color: var(--text-main); font-weight: 600;">
+            📍 No venues found within all members' travel limits
+          </p>
+          <p style="font-size: 0.78rem; margin-bottom: 1.2rem; color: var(--text-secondary); max-width: 440px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+            Some group members' maximum travel distance settings do not overlap with venues in this area.
+          </p>
+          <button type="button" class="btn-secondary" style="font-size: 0.8rem; padding: 0.45rem 0.9rem; cursor: pointer; border-radius: var(--radius-sm);" onclick="toggleWithinLimitsFilter(false)">
+            ⚠️ Show options exceeding limits (Expand search)
+          </button>
+        </div>
+      `;
+    } else {
+      recCardsList.innerHTML = `
+        <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
+          <p style="font-size: 0.95rem; margin-bottom: 0.4rem;">No matching venues found for these budget and distance filters.</p>
+          <p style="font-size: 0.78rem;">Try selecting "All Budgets" or choosing a wider distance radius.</p>
+        </div>
+      `;
+    }
     return;
   }
 
