@@ -55,6 +55,7 @@ from backend.models import (
     PollVote,
     HangoutPlaceVote,
     GroupPollOption,
+    SavedActivity,
     generate_invite_code,
 )
 from backend.realtime import manager as ws_manager
@@ -1786,3 +1787,39 @@ def index():
     return {
         "message": "User Auth API is running. Access /docs for interactive Swagger documentation."
     }
+
+@app.post("/api/saved-activities")
+async def save_activity(
+    activity_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    activity_id = activity_data.get("activity_id")
+    existing = db.query(SavedActivity).filter(
+        SavedActivity.user_id == current_user.id,
+        SavedActivity.activity_id == activity_id
+    ).first()
+    
+    if existing:
+        return {"message": "Already saved"}
+        
+    saved = SavedActivity(user_id=current_user.id, activity_id=activity_id)
+    db.add(saved)
+    db.commit()
+    return {"message": "Activity saved successfully"}
+
+@app.delete("/api/saved-activities/{activity_id}")
+async def unsave_activity(
+    activity_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    saved = db.query(SavedActivity).filter(
+        SavedActivity.user_id == current_user.id,
+        SavedActivity.activity_id == activity_id
+    ).first()
+    
+    if saved:
+        db.delete(saved)
+        db.commit()
+    return {"message": "Activity removed from saved"}

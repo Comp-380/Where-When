@@ -204,3 +204,10 @@ class HangoutPlaceVote(Base):
 
     poll = relationship("HangoutPoll", back_populates="place_votes")
     user = relationship("User")
+
+class SavedActivity(Base):
+    __tablename__ = "saved_activities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    activity_id = Column(String, index=True, nullable=False)

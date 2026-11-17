@@ -2959,6 +2959,10 @@ function renderRecommendationsList(data) {
             </span>
           </div>
           <div class="rec-info-row">
+        <span class="rec-info-label">Operating Hours</span>
+        <span class="rec-info-val">${hoursListHtml}</span>
+    </div>
+          <div class="rec-info-row">
             <span class="rec-info-label">Official Links</span>
             <span class="rec-info-val" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
               ${item.website_url ? `<a href="${escapeHtml(item.website_url)}" target="_blank" rel="noopener noreferrer">Website ↗</a>` : ""}
@@ -2966,8 +2970,12 @@ function renderRecommendationsList(data) {
               ${item.ticket_url ? `<a href="${escapeHtml(item.ticket_url)}" target="_blank" rel="noopener noreferrer">Tickets ↗</a>` : ""}
             </span>
           </div>
-        </div>
-        <div class="rec-info-row" style="margin-top: 0.55rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.06);">
+<div style="margin-top: 1rem; text-align: center;">
+        <button class="save-activity-btn" onclick="toggleSaveActivity('${item.id || activity.id}')" style="width: 100%; padding: 10px 16px; background: var(--accent-color, #4f46e5); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;">
+            <i class="fa-regular fa-bookmark"></i> Save Activity
+        </button>
+    </div>
+              <div class="rec-info-row" style="margin-top: 0.55rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.06);">
           <span class="rec-info-label">Operating Hours</span>
           <div class="rec-info-val" style="font-size: 0.73rem; color: var(--text-secondary); line-height: 1.4;">
             ${hoursListHtml}
@@ -3211,3 +3219,26 @@ switchTab("login");
 checkEmailVerificationParam();
 checkPasswordResetParam();
 checkExistingSession();
+async function toggleSaveActivity(activityId) {
+    const token = localStorage.getItem("token");
+    try {
+        const response = await fetch(`/api/saved-activities`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({ activity_id: String(activityId) })
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+            alert(data.message || "Activity saved successfully!");
+        } else {
+            alert(data.detail || "Failed to save activity.");
+        }
+    } catch (err) {
+        console.error("Error saving activity:", err);
+        alert("An error occurred while saving the activity.");
+    }
+}
