@@ -328,6 +328,8 @@ class RecommendationItem(BaseModel):
     rating: Optional[float] = None
     user_rating_count: int = 0  # SCRUM-52: Total number of reviews
     price_level: Optional[str] = None
+    price_display: Optional[str] = None
+    price_tier: Optional[int] = None
     # SCRUM-51: Detailed Activity Information fields
     description: Optional[str] = None
     phone_number: Optional[str] = None
@@ -338,9 +340,15 @@ class RecommendationItem(BaseModel):
     event_time: Optional[str] = None
     is_open_confirmed: bool = True
     open_hours_text: Optional[str] = None
+    # Activity distance metrics
     avg_distance_miles: float
+    min_member_distance_miles: Optional[float] = None
+    max_member_distance_miles: Optional[float] = None
+    distance_from_midpoint: Optional[float] = None
     all_within_limit: bool = True
     user_distances: List[UserDistanceInfo] = []
+    # Activity recommendation tags
+    match_reasons: List[str] = []
     # SCRUM-52: List of customer reviews
     reviews: List[ActivityReview] = []
     is_mock: bool = False
@@ -351,6 +359,11 @@ class PollRecommendationsResponse(BaseModel):
     poll_id: int
     group_id: int
     category: str
+    budget: Optional[str] = None
+    max_distance: Optional[float] = None
+    within_limits_only: bool = False
+    sort_by: Optional[str] = "recommended"
+    total_found: int = 0
     midpoint_address: Optional[str] = None
     missing_address_users: List[str] = []
     is_mock_data: bool = False

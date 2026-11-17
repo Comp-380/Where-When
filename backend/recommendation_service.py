@@ -31,6 +31,47 @@ def get_ticketmaster_api_key() -> str:
     return os.getenv("TICKETMASTER_API_KEY", "").strip()
 
 
+def normalize_price_level(raw_price: Any) -> Tuple[Optional[str], Optional[str], int]:
+    """
+    Normalizes raw price level values into:
+      (price_level_code, price_display, price_tier)
+    price_tier:
+      0 = Free
+      1 = $ (Budget / Under $15)
+      2 = $$ (Moderate / $15–$35)
+      3 = $$$ (Upscale / $35–$75)
+      4 = $$$$ (Splurge / $75+)
+    """
+    if raw_price is None:
+        return (None, None, 2)
+
+    val = str(raw_price).strip()
+    val_upper = val.upper()
+
+    if val_upper in ("PRICE_LEVEL_FREE", "FREE", "0", "FREE ($0)"):
+        return ("Free", "Free ($0)", 0)
+    if val_upper in ("PRICE_LEVEL_INEXPENSIVE", "$", "1", "INEXPENSIVE", "BUDGET"):
+        return ("$", "$ (Under $15)", 1)
+    if val_upper in ("PRICE_LEVEL_MODERATE", "$$", "2", "MODERATE"):
+        return ("$$", "$$ ($15–$35)", 2)
+    if val_upper in ("PRICE_LEVEL_EXPENSIVE", "$$$", "3", "EXPENSIVE", "UPSCALE"):
+        return ("$$$", "$$$ ($35–$75)", 3)
+    if val_upper in ("PRICE_LEVEL_VERY_EXPENSIVE", "$$$$", "4", "VERY_EXPENSIVE", "SPLURGE"):
+        return ("$$$$", "$$$$ ($75+)", 4)
+
+    dollars = val.count("$")
+    if dollars == 1:
+        return ("$", "$ (Under $15)", 1)
+    if dollars == 2:
+        return ("$$", "$$ ($15–$35)", 2)
+    if dollars == 3:
+        return ("$$$", "$$$ ($35–$75)", 3)
+    if dollars >= 4:
+        return ("$$$$", "$$$$ ($75+)", 4)
+
+    return (val, val, 2)
+
+
 def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculates great-circle distance in miles between two coordinates."""
     r_miles = 3958.8
@@ -251,6 +292,8 @@ async def fetch_google_places(
                             "author_photo_url": author_attr.get("photoUri") if isinstance(author_attr, dict) else None,
                         })
 
+                price_code, price_display, price_tier = normalize_price_level(p.get("priceLevel"))
+
                 results.append({
                     "id": p.get("id", display_name),
                     "title": display_name,
@@ -260,7 +303,9 @@ async def fetch_google_places(
                     "address": formatted_addr,
                     "rating": rating,
                     "user_rating_count": int(user_rating_count or len(parsed_reviews)),
-                    "price_level": p.get("priceLevel"),
+                    "price_level": price_code,
+                    "price_display": price_display,
+                    "price_tier": price_tier,
                     "description": description,
                     "phone_number": phone_number,
                     "website_url": website_url,
@@ -344,6 +389,29 @@ async def fetch_ticketmaster_events(
                 full_addr = f"{venue_name} • {venue_addr}".strip(" •,")
                 ev_time_str = f"Starts at {local_time[:5]}" if local_time else "Evening show"
 
+                # Extract priceRanges from Ticketmaster if available
+                price_ranges = ev.get("priceRanges") or []
+                price_code, price_display, price_tier = "$$", "$$ ($15–$35)", 2
+                if price_ranges and isinstance(price_ranges, list) and len(price_ranges) > 0:
+                    pr = price_ranges[0]
+                    min_p = pr.get("min")
+                    max_p = pr.get("max")
+                    if min_p is not None:
+                        if max_p is not None and max_p > min_p:
+                            price_display = f"${int(min_p)}–${int(max_p)}"
+                        else:
+                            price_display = f"${int(min_p)}"
+                        if min_p <= 0:
+                            price_code, price_tier = "Free", 0
+                        elif min_p < 20:
+                            price_code, price_tier = "$", 1
+                        elif min_p < 40:
+                            price_code, price_tier = "$$", 2
+                        elif min_p < 80:
+                            price_code, price_tier = "$$$", 3
+                        else:
+                            price_code, price_tier = "$$$$", 4
+
                 results.append({
                     "id": ev.get("id", ev_title),
                     "title": ev_title,
@@ -353,7 +421,9 @@ async def fetch_ticketmaster_events(
                     "address": full_addr,
                     "rating": 4.8,
                     "user_rating_count": 124,
-                    "price_level": "$$",
+                    "price_level": price_code,
+                    "price_display": price_display,
+                    "price_tier": price_tier,
                     "description": f"Live {subcat.lower()} event hosted at {venue_name}.",
                     "phone_number": "(800) 653-8000",
                     "website_url": ev.get("url"),
@@ -429,6 +499,7 @@ async def fetch_osm_places(
                         lon = float(item["lon"])
                         addr = item.get("display_name", "")
                         subcat = subcat_map.get(q, q.capitalize())
+                        price_code, price_display, price_tier = normalize_price_level("$" if q == "cafe" else "$$")
                         results.append({
                             "id": f"osm_{item.get('place_id', raw_name)}",
                             "title": raw_name,
@@ -438,7 +509,9 @@ async def fetch_osm_places(
                             "address": addr,
                             "rating": 4.6,
                             "user_rating_count": 95,
-                            "price_level": "$$",
+                            "price_level": price_code,
+                            "price_display": price_display,
+                            "price_tier": price_tier,
                             "description": f"Popular local {subcat.lower()} convenient to your group's midpoint.",
                             "phone_number": "(818) 555-0100",
                             "website_url": f"https://www.google.com/maps/search/?api=1&query={lat},{lon}",
@@ -522,6 +595,38 @@ def generate_curated_mock_places(
                 ],
             },
             {
+                "title": "Taco Loco Street Taqueria",
+                "subcategory": "Mexican Street Food",
+                "lat_offset": -0.010,
+                "lon_offset": -0.005,
+                "rating": 4.8,
+                "user_rating_count": 480,
+                "price_level": "$",
+                "address": "220 Mission Blvd",
+                "description": "Authentic street taco counter known for handmade tortillas, $3 al pastor tacos, fresh salsas, and horchata.",
+                "phone_number": "(818) 555-0188",
+                "website_url": "https://example.com/tacoloco",
+                "weekday_hours": [
+                    "Mon–Sun: 10:00 AM – 12:00 AM",
+                ],
+                "open_hour": 10,
+                "close_hour": 24,
+                "reviews": [
+                    {
+                        "author_name": "Mateo Gomez",
+                        "rating": 5.0,
+                        "relative_time": "1 week ago",
+                        "text": "Best tacos in the neighborhood! Super cheap, generous portions, and fast for groups.",
+                    },
+                    {
+                        "author_name": "Jessica Alvarez",
+                        "rating": 4.5,
+                        "relative_time": "3 weeks ago",
+                        "text": "Amazing al pastor and birria. Great budget spot to grab quick food with friends.",
+                    },
+                ],
+            },
+            {
                 "title": "El Fuego Cantina & Taco Lounge",
                 "subcategory": "Mexican & Cocktails",
                 "lat_offset": -0.018,
@@ -585,6 +690,38 @@ def generate_curated_mock_places(
                         "rating": 5.0,
                         "relative_time": "2 weeks ago",
                         "text": "Hands down the best spicy miso ramen in town. Fast service even when our whole study group showed up.",
+                    },
+                ],
+            },
+            {
+                "title": "Bella Vista Steakhouse & Wine Bar",
+                "subcategory": "Fine Dining & Steaks",
+                "lat_offset": 0.030,
+                "lon_offset": -0.020,
+                "rating": 4.9,
+                "user_rating_count": 310,
+                "price_level": "$$$",
+                "address": "500 Grand Avenue, Penthouse Level",
+                "description": "Upscale rooftop steakhouse serving dry-aged prime steaks, fresh seafood towers, and panoramic valley views.",
+                "phone_number": "(818) 555-0955",
+                "website_url": "https://example.com/bellavista",
+                "weekday_hours": [
+                    "Mon–Sun: 4:00 PM – 11:30 PM",
+                ],
+                "open_hour": 16,
+                "close_hour": 24,
+                "reviews": [
+                    {
+                        "author_name": "Victoria Sterling",
+                        "rating": 5.0,
+                        "relative_time": "3 days ago",
+                        "text": "Splendid celebratory dinner! The bone-in ribeye was cooked to perfection and service was white-glove.",
+                    },
+                    {
+                        "author_name": "David Ross",
+                        "rating": 4.5,
+                        "relative_time": "2 weeks ago",
+                        "text": "Incredible wine cellar and top-tier ambiance for a special group occasion.",
                     },
                 ],
             },
@@ -663,6 +800,7 @@ def generate_curated_mock_places(
             if c_open_min <= slot_start_min and c_close_min >= slot_end_min:
                 plat = round(mid_lat + c["lat_offset"], 5)
                 plon = round(mid_lon + c["lon_offset"], 5)
+                p_code, p_disp, p_tier = normalize_price_level(c["price_level"])
                 results.append({
                     "id": f"mock-food-{abs(hash(c['title']))}",
                     "title": c["title"],
@@ -672,7 +810,9 @@ def generate_curated_mock_places(
                     "address": c["address"],
                     "rating": c["rating"],
                     "user_rating_count": c["user_rating_count"],
-                    "price_level": c["price_level"],
+                    "price_level": p_code,
+                    "price_display": p_disp,
+                    "price_tier": p_tier,
                     "description": c["description"],
                     "phone_number": c["phone_number"],
                     "website_url": c["website_url"],
@@ -688,6 +828,33 @@ def generate_curated_mock_places(
                 })
     else:  # entertainment
         candidates = [
+            {
+                "title": "Starlight City Park & Disc Golf Course",
+                "item_type": "venue",
+                "subcategory": "Park & Outdoor Games",
+                "lat_offset": -0.008,
+                "lon_offset": 0.012,
+                "rating": 4.7,
+                "user_rating_count": 290,
+                "price_level": "Free",
+                "address": "100 Park View Terrace",
+                "description": "Scenic community park with 18-hole championship disc golf, walking trails, picnic pavilions, and illuminated night paths.",
+                "phone_number": "(818) 555-0811",
+                "website_url": "https://example.com/starlightpark",
+                "weekday_hours": [
+                    "Mon–Sun: 6:00 AM – 10:00 PM",
+                ],
+                "open_hour": 6,
+                "close_hour": 22,
+                "reviews": [
+                    {
+                        "author_name": "Danielle Cooper",
+                        "rating": 5.0,
+                        "relative_time": "2 weeks ago",
+                        "text": "Free admission and beautifully kept courses. Great open space for a relaxed group afternoon.",
+                    },
+                ],
+            },
             {
                 "title": "Neon Glow Mini Golf & Arcade",
                 "item_type": "venue",
@@ -788,6 +955,33 @@ def generate_curated_mock_places(
                 ],
             },
             {
+                "title": "Apex Karting Grand Prix Track",
+                "item_type": "venue",
+                "subcategory": "Electric Go-Karts & Racing",
+                "lat_offset": 0.022,
+                "lon_offset": -0.018,
+                "rating": 4.9,
+                "user_rating_count": 420,
+                "price_level": "$$$",
+                "address": "650 Motorway Dr",
+                "description": "High-speed multi-level indoor electric karting track with live telemetry, timing screens, and racing suits.",
+                "phone_number": "(818) 555-0940",
+                "website_url": "https://example.com/apexkarting",
+                "weekday_hours": [
+                    "Mon–Sun: 10:00 AM – 11:00 PM",
+                ],
+                "open_hour": 10,
+                "close_hour": 23,
+                "reviews": [
+                    {
+                        "author_name": "Brandon Cole",
+                        "rating": 5.0,
+                        "relative_time": "5 days ago",
+                        "text": "Fast karts that hit 45 mph! Group heat racing was competitive and adrenaline packed.",
+                    },
+                ],
+            },
+            {
                 "title": f"Live Indie Rock Showcase ({day_name} Night)",
                 "item_type": "event",
                 "subcategory": "Concert",
@@ -852,6 +1046,7 @@ def generate_curated_mock_places(
             if c_open_min <= slot_start_min and c_close_min >= slot_end_min:
                 plat = round(mid_lat + c["lat_offset"], 5)
                 plon = round(mid_lon + c["lon_offset"], 5)
+                p_code, p_disp, p_tier = normalize_price_level(c.get("price_level"))
                 item = {
                     "id": f"mock-ent-{abs(hash(c['title']))}",
                     "title": c["title"],
@@ -861,7 +1056,9 @@ def generate_curated_mock_places(
                     "address": c["address"],
                     "rating": c["rating"],
                     "user_rating_count": c["user_rating_count"],
-                    "price_level": c.get("price_level"),
+                    "price_level": p_code,
+                    "price_display": p_disp,
+                    "price_tier": p_tier,
                     "description": c["description"],
                     "phone_number": c["phone_number"],
                     "website_url": c["website_url"],
@@ -892,9 +1089,15 @@ async def get_recommendations_for_poll(
     slot_start: time,
     slot_end: time,
     members_with_coords: List[Dict[str, Any]],
+    budget: Optional[str] = None,
+    max_distance: Optional[float] = None,
+    within_limits_only: bool = False,
+    sort_by: str = "recommended",
 ) -> Dict[str, Any]:
     """
-    Main orchestrator for poll place and entertainment recommendations.
+    Main orchestrator for poll place and entertainment recommendations,
+    calculating activity distances, filtering by budget & distance,
+    and ranking suggestions.
     """
     valid_coords = [
         (m["lat"], m["lon"]) for m in members_with_coords if m.get("lat") is not None and m.get("lon") is not None
@@ -955,6 +1158,7 @@ async def get_recommendations_for_poll(
     for item in raw_items:
         plat = item.get("lat", mid_lat)
         plon = item.get("lon", mid_lon)
+        dist_from_midpoint = haversine_miles(mid_lat, mid_lon, plat, plon)
 
         user_distances = []
         all_within_limit = True
@@ -987,10 +1191,79 @@ async def get_recommendations_for_poll(
             if user_distances
             else 0.0
         )
+        min_dist = (
+            round(min(ud["distance_miles"] for ud in user_distances), 2)
+            if user_distances
+            else avg_dist
+        )
+        max_dist = (
+            round(max(ud["distance_miles"] for ud in user_distances), 2)
+            if user_distances
+            else avg_dist
+        )
 
         reviews_list = item.get("reviews") or []
-        rating_val = item.get("rating") if item.get("rating") is not None else 4.5
+        rating_val = float(item["rating"]) if item.get("rating") is not None else 4.5
         rating_count_val = item.get("user_rating_count") if item.get("user_rating_count") is not None else len(reviews_list)
+
+        # Normalize price level and tier
+        p_code, p_disp, p_tier = normalize_price_level(item.get("price_level"))
+        if item.get("price_display"):
+            p_disp = item["price_display"]
+        if item.get("price_tier") is not None:
+            p_tier = item["price_tier"]
+
+        # 1. Budget Filtering
+        if budget and budget.strip() and budget.strip().lower() != "all":
+            b_norm = budget.strip().lower()
+            if b_norm in ("$", "1", "budget", "inexpensive"):
+                if p_tier > 1:
+                    continue
+            elif b_norm in ("$$", "2", "moderate"):
+                if p_tier != 2:
+                    continue
+            elif b_norm in ("$$$", "$$$+", "3", "upscale"):
+                if p_tier < 3:
+                    continue
+            elif b_norm in ("$$$$", "4", "splurge"):
+                if p_tier < 4:
+                    continue
+            elif b_norm in ("free", "0"):
+                if p_tier != 0:
+                    continue
+
+        # 2. Distance Filtering
+        if max_distance is not None and max_distance > 0:
+            if avg_dist > float(max_distance):
+                continue
+
+        if within_limits_only:
+            if not all_within_limit:
+                continue
+
+        # 3. Match reasons calculation
+        match_reasons = []
+        if all_within_limit:
+            match_reasons.append("✓ In everyone's travel limit")
+        else:
+            exceeded_count = sum(1 for ud in user_distances if not ud["is_within_limit"])
+            match_reasons.append(f"⚠ Over limit for {exceeded_count} member(s)")
+
+        if rating_val >= 4.8:
+            match_reasons.append(f"★ Top Rated ({rating_val:.1f})")
+
+        if p_tier <= 1:
+            match_reasons.append("💵 Budget-Friendly")
+        elif p_tier == 2:
+            match_reasons.append("💳 Moderate Budget")
+        elif p_tier >= 3:
+            match_reasons.append("💎 Premium Choice")
+
+        if dist_from_midpoint <= 6.0:
+            match_reasons.append("📍 Close to group center")
+
+        if item.get("is_open_confirmed"):
+            match_reasons.append("⏱ Verified open")
 
         scored_items.append({
             "id": str(item["id"]),
@@ -1001,7 +1274,9 @@ async def get_recommendations_for_poll(
             "address": item.get("address", ""),
             "rating": rating_val,
             "user_rating_count": int(rating_count_val),
-            "price_level": item.get("price_level"),
+            "price_level": p_code,
+            "price_display": p_disp,
+            "price_tier": p_tier,
             "description": item.get("description") or f"Popular {item.get('subcategory', 'venue')} located at {item.get('address', 'nearby')}.",
             "phone_number": item.get("phone_number"),
             "website_url": item.get("website_url"),
@@ -1012,20 +1287,38 @@ async def get_recommendations_for_poll(
             "is_open_confirmed": item.get("is_open_confirmed", True),
             "open_hours_text": item.get("open_hours_text"),
             "avg_distance_miles": avg_dist,
+            "min_member_distance_miles": min_dist,
+            "max_member_distance_miles": max_dist,
+            "distance_from_midpoint": dist_from_midpoint,
             "all_within_limit": all_within_limit,
             "user_distances": user_distances,
+            "match_reasons": match_reasons,
             "reviews": reviews_list,
             "is_mock": item.get("is_mock", False),
             "source": item.get("source", "Live"),
         })
 
-    scored_items.sort(
-        key=lambda x: (
-            0 if x["all_within_limit"] else 1,
-            -(x["rating"] or 0),
-            x["avg_distance_miles"],
+    # Sort results
+    if sort_by == "distance":
+        scored_items.sort(key=lambda x: (x["avg_distance_miles"], -(x["rating"] or 0)))
+    elif sort_by == "rating":
+        scored_items.sort(key=lambda x: (-(x["rating"] or 0), x["avg_distance_miles"]))
+    elif sort_by == "budget":
+        scored_items.sort(
+            key=lambda x: (
+                x["price_tier"] if x.get("price_tier") is not None else 2,
+                -(x["rating"] or 0),
+                x["avg_distance_miles"],
+            )
         )
-    )
+    else:  # "recommended"
+        scored_items.sort(
+            key=lambda x: (
+                0 if x["all_within_limit"] else 1,
+                -(x["rating"] or 0),
+                x["avg_distance_miles"],
+            )
+        )
 
     is_mock_dataset = any(item.get("is_mock", False) for item in raw_items)
     notice = (
@@ -1038,6 +1331,11 @@ async def get_recommendations_for_poll(
         "poll_id": poll_id,
         "group_id": group_id,
         "category": category,
+        "budget": budget,
+        "max_distance": max_distance,
+        "within_limits_only": within_limits_only,
+        "sort_by": sort_by,
+        "total_found": len(scored_items),
         "midpoint_address": f"{round(mid_lat, 4)}° N, {round(abs(mid_lon), 4)}° W",
         "missing_address_users": missing_address_users,
         "is_mock_data": is_mock_dataset,

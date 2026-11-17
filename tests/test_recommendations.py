@@ -6,6 +6,7 @@ from backend.recommendation_service import (
     haversine_miles,
     is_venue_open_during_slot,
     get_recommendations_for_poll,
+    normalize_price_level,
 )
 from tests.testing_db import client, TestingSessionLocal
 
@@ -226,3 +227,219 @@ def test_recommendation_endpoints_and_poll_option_addition():
     )
     assert res_place.status_code == 200
     assert res_place.json()["place"] == chosen_venue
+
+
+def test_normalize_price_level():
+    code, disp, tier = normalize_price_level("PRICE_LEVEL_FREE")
+    assert code == "Free" and tier == 0
+
+    code, disp, tier = normalize_price_level("PRICE_LEVEL_INEXPENSIVE")
+    assert code == "$" and tier == 1
+
+    code, disp, tier = normalize_price_level("$$")
+    assert code == "$$" and tier == 2
+
+    code, disp, tier = normalize_price_level("PRICE_LEVEL_EXPENSIVE")
+    assert code == "$$$" and tier == 3
+
+    code, disp, tier = normalize_price_level("PRICE_LEVEL_VERY_EXPENSIVE")
+    assert code == "$$$$" and tier == 4
+
+
+@pytest.mark.anyio
+async def test_filter_activities_by_budget():
+    slot_date = date(2026, 11, 13)
+    start_time = time(18, 0)
+    end_time = time(21, 0)
+    members = [
+        {"user_id": 1, "username": "alice", "lat": 34.2381, "lon": -118.5282, "max_travel_distance": 25},
+    ]
+
+    # Filter by budget tier $ (Inexpensive / Under $15)
+    recs_budget = await get_recommendations_for_poll(
+        poll_id=1,
+        group_id=1,
+        category="food",
+        slot_date=slot_date,
+        slot_start=start_time,
+        slot_end=end_time,
+        members_with_coords=members,
+        budget="$",
+    )
+    assert recs_budget["budget"] == "$"
+    assert len(recs_budget["items"]) > 0
+    for item in recs_budget["items"]:
+        assert item["price_tier"] <= 1
+
+    # Filter by budget tier $$ (Moderate)
+    recs_moderate = await get_recommendations_for_poll(
+        poll_id=1,
+        group_id=1,
+        category="food",
+        slot_date=slot_date,
+        slot_start=start_time,
+        slot_end=end_time,
+        members_with_coords=members,
+        budget="$$",
+    )
+    assert recs_moderate["budget"] == "$$"
+    assert len(recs_moderate["items"]) > 0
+    for item in recs_moderate["items"]:
+        assert item["price_tier"] == 2
+
+    # Filter by budget tier $$$ (Upscale)
+    recs_upscale = await get_recommendations_for_poll(
+        poll_id=1,
+        group_id=1,
+        category="food",
+        slot_date=slot_date,
+        slot_start=start_time,
+        slot_end=end_time,
+        members_with_coords=members,
+        budget="$$$",
+    )
+    assert recs_upscale["budget"] == "$$$"
+    assert len(recs_upscale["items"]) > 0
+    for item in recs_upscale["items"]:
+        assert item["price_tier"] >= 3
+
+
+@pytest.mark.anyio
+async def test_activity_distance_calculation_and_filtering():
+    slot_date = date(2026, 11, 13)
+    start_time = time(18, 0)
+    end_time = time(21, 0)
+    # User in Northridge with 5-mile limit, User in Downtown LA (~25 miles away)
+    members = [
+        {"user_id": 1, "username": "local_user", "lat": 34.2381, "lon": -118.5282, "max_travel_distance": 5},
+        {"user_id": 2, "username": "far_user", "lat": 34.0522, "lon": -118.2437, "max_travel_distance": 50},
+    ]
+
+    # Check distance calculation fields
+    all_recs = await get_recommendations_for_poll(
+        poll_id=2,
+        group_id=1,
+        category="entertainment",
+        slot_date=slot_date,
+        slot_start=start_time,
+        slot_end=end_time,
+        members_with_coords=members,
+    )
+    assert len(all_recs["items"]) > 0
+    for item in all_recs["items"]:
+        assert "avg_distance_miles" in item
+        assert "min_member_distance_miles" in item
+        assert "max_member_distance_miles" in item
+        assert item["min_member_distance_miles"] <= item["avg_distance_miles"] <= item["max_member_distance_miles"]
+        assert len(item["match_reasons"]) > 0
+
+    # Filter with within_limits_only=True
+    strict_recs = await get_recommendations_for_poll(
+        poll_id=2,
+        group_id=1,
+        category="entertainment",
+        slot_date=slot_date,
+        slot_start=start_time,
+        slot_end=end_time,
+        members_with_coords=members,
+        within_limits_only=True,
+    )
+    for item in strict_recs["items"]:
+        assert item["all_within_limit"] is True
+
+
+@pytest.mark.anyio
+async def test_activity_recommendations_sorting():
+    slot_date = date(2026, 11, 13)
+    start_time = time(18, 0)
+    end_time = time(21, 0)
+    members = [
+        {"user_id": 1, "username": "alice", "lat": 34.2381, "lon": -118.5282, "max_travel_distance": 30},
+    ]
+
+    # Sort by distance
+    by_dist = await get_recommendations_for_poll(
+        poll_id=3,
+        group_id=1,
+        category="food",
+        slot_date=slot_date,
+        slot_start=start_time,
+        slot_end=end_time,
+        members_with_coords=members,
+        sort_by="distance",
+    )
+    dists = [item["avg_distance_miles"] for item in by_dist["items"]]
+    assert dists == sorted(dists)
+
+    # Sort by rating
+    by_rating = await get_recommendations_for_poll(
+        poll_id=3,
+        group_id=1,
+        category="food",
+        slot_date=slot_date,
+        slot_start=start_time,
+        slot_end=end_time,
+        members_with_coords=members,
+        sort_by="rating",
+    )
+    ratings = [item["rating"] for item in by_rating["items"]]
+    assert ratings == sorted(ratings, reverse=True)
+
+    # Sort by budget
+    by_budget = await get_recommendations_for_poll(
+        poll_id=3,
+        group_id=1,
+        category="food",
+        slot_date=slot_date,
+        slot_start=start_time,
+        slot_end=end_time,
+        members_with_coords=members,
+        sort_by="budget",
+    )
+    tiers = [item["price_tier"] for item in by_budget["items"]]
+    assert tiers == sorted(tiers)
+
+
+def test_recommendations_api_query_params():
+    db = TestingSessionLocal()
+    alice = create_user(db, "alice_api", "alice_api@test.com", street="18111 Nordhoff St", max_dist=25)
+    group = Group(name="Foodies", owner_id=alice.id)
+    db.add(group)
+    db.commit()
+    db.refresh(group)
+    db.add(GroupMember(group_id=group.id, user_id=alice.id, role="owner"))
+
+    poll = HangoutPoll(
+        group_id=group.id,
+        date=date(2026, 11, 22),
+        start_time=time(18, 0),
+        end_time=time(21, 0),
+        place="TBD",
+    )
+    db.add(poll)
+    db.commit()
+    db.refresh(poll)
+
+    token = create_access_token({"sub": str(alice.id), "type": "access"})
+
+    # Test filtering by budget via endpoint
+    res_b = client.get(
+        f"/api/groups/{group.id}/hangouts/{poll.id}/recommendations?category=food&budget=$",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_b.status_code == 200
+    data_b = res_b.json()
+    assert data_b["budget"] == "$"
+    for item in data_b["items"]:
+        assert item["price_tier"] <= 1
+
+    # Test sorting via endpoint
+    res_sort = client.get(
+        f"/api/groups/{group.id}/hangouts/{poll.id}/recommendations?category=food&sort_by=distance",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_sort.status_code == 200
+    data_sort = res_sort.json()
+    dists = [item["avg_distance_miles"] for item in data_sort["items"]]
+    assert dists == sorted(dists)
+

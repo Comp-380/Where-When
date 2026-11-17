@@ -2570,10 +2570,56 @@ const recCardsList = document.getElementById("rec-cards-list");
 const recSourceNotice = document.getElementById("rec-source-notice");
 const recSourceIcon = document.getElementById("rec-source-icon");
 const recSourceText = document.getElementById("rec-source-text");
+const recBudgetPills = document.getElementById("rec-budget-pills");
+const recDistanceFilter = document.getElementById("rec-distance-filter");
+const recWithinLimitsCheck = document.getElementById("rec-within-limits-check");
+const recSortFilter = document.getElementById("rec-sort-filter");
 
 state.activeRecPoll = null;
 state.activeRecCategory = "food";
 state.recCache = {};
+state.recFilters = {
+  budget: "all",
+  maxDistance: null,
+  withinLimitsOnly: false,
+  sortBy: "recommended",
+};
+
+window.setRecBudgetFilter = function (budgetVal, btnEl) {
+  state.recFilters.budget = budgetVal;
+  if (recBudgetPills) {
+    recBudgetPills.querySelectorAll(".rec-pill-btn").forEach((btn) => btn.classList.remove("active"));
+  }
+  if (btnEl) btnEl.classList.add("active");
+  applyRecFilters();
+};
+
+window.applyRecFilterChange = function () {
+  if (recDistanceFilter) {
+    const val = recDistanceFilter.value.trim();
+    state.recFilters.maxDistance = val ? parseFloat(val) : null;
+  }
+  if (recWithinLimitsCheck) {
+    state.recFilters.withinLimitsOnly = Boolean(recWithinLimitsCheck.checked);
+  }
+  if (recSortFilter) {
+    state.recFilters.sortBy = recSortFilter.value.trim() || "recommended";
+  }
+  applyRecFilters();
+};
+
+function applyRecFilters() {
+  if (!state.activeRecPoll) return;
+  const { pollId } = state.activeRecPoll;
+  const category = state.activeRecCategory || "food";
+  const cacheKey = `${pollId}_${category}`;
+  const data = state.recCache[cacheKey];
+  if (data) {
+    renderRecommendationsList(data);
+  } else {
+    loadPollRecommendations(category);
+  }
+}
 
 window.openRecommendationsModal = async function (pollId, groupId, dateStr, startTime, endTime, currentPlace) {
   try {
@@ -2720,16 +2766,60 @@ function renderRecommendationsList(data) {
     }
   }
 
-  const items = data.items || [];
+  // Raw items from server
+  const rawItems = (data.items || []).slice();
+
+  // Apply Client-Side Budget Filter
+  const budgetFilter = (state.recFilters && state.recFilters.budget) || "all";
+  let items = rawItems.filter((item) => {
+    if (budgetFilter === "all") return true;
+    const tier = item.price_tier != null ? item.price_tier : 2;
+    if (budgetFilter === "$") return tier <= 1;
+    if (budgetFilter === "$$") return tier === 2;
+    if (budgetFilter === "$$$") return tier >= 3;
+    return true;
+  });
+
+  // Apply Client-Side Distance Filter
+  const maxDist = state.recFilters && state.recFilters.maxDistance;
+  if (maxDist != null && maxDist > 0) {
+    items = items.filter((item) => item.avg_distance_miles <= maxDist);
+  }
+
+  // Apply Within Limits Only Filter
+  if (state.recFilters && state.recFilters.withinLimitsOnly) {
+    items = items.filter((item) => item.all_within_limit === true);
+  }
+
+  // Apply Sorting
+  const sortBy = (state.recFilters && state.recFilters.sortBy) || "recommended";
+  if (sortBy === "distance") {
+    items.sort((a, b) => a.avg_distance_miles - b.avg_distance_miles);
+  } else if (sortBy === "rating") {
+    items.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  } else if (sortBy === "budget") {
+    items.sort((a, b) => ((a.price_tier ?? 2) - (b.price_tier ?? 2)) || a.avg_distance_miles - b.avg_distance_miles);
+  } else {
+    // "recommended" default: respect limits first, then top ratings, then lowest distance
+    items.sort((a, b) => {
+      if (a.all_within_limit !== b.all_within_limit) {
+        return a.all_within_limit ? -1 : 1;
+      }
+      const diffRating = (b.rating || 0) - (a.rating || 0);
+      if (Math.abs(diffRating) > 0.05) return diffRating;
+      return a.avg_distance_miles - b.avg_distance_miles;
+    });
+  }
+
   if (recItemsCount) {
-    recItemsCount.textContent = `${items.length} verified ${data.category === "food" ? "dining places" : "entertainment options"}`;
+    recItemsCount.textContent = `${items.length} of ${rawItems.length} options match filters`;
   }
 
   if (items.length === 0) {
     recCardsList.innerHTML = `
       <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
-        <p style="font-size: 0.95rem; margin-bottom: 0.4rem;">No matching open venues found in this travel radius.</p>
-        <p style="font-size: 0.78rem;">Try increasing members' max travel distance in their profile settings.</p>
+        <p style="font-size: 0.95rem; margin-bottom: 0.4rem;">No matching venues found for these budget and distance filters.</p>
+        <p style="font-size: 0.78rem;">Try selecting "All Budgets" or choosing a wider distance radius.</p>
       </div>
     `;
     return;
@@ -2760,15 +2850,31 @@ function renderRecommendationsList(data) {
     const totalReviews = item.user_rating_count || reviewsList.length;
     const ratingStars = item.rating ? `★ ${item.rating.toFixed(1)}` : "★ New";
     const reviewCountText = totalReviews > 0 ? ` (${totalReviews} reviews)` : "";
-    const priceText = item.price_level ? ` • ${escapeHtml(item.price_level)}` : "";
+
+    // Budget Price Badge
+    let priceClass = "tier-2";
+    if (item.price_tier === 0 || item.price_level === "Free") priceClass = "free";
+    else if (item.price_tier === 1) priceClass = "tier-1";
+    else if (item.price_tier === 2) priceClass = "tier-2";
+    else if (item.price_tier === 3) priceClass = "tier-3";
+    else if (item.price_tier >= 4) priceClass = "tier-4";
+
+    const priceBadge = item.price_level
+      ? `<span class="rec-price-badge ${priceClass}">${escapeHtml(item.price_display || item.price_level)}</span>`
+      : "";
+
+    // Match reasons chips
+    const matchReasonsHtml = (item.match_reasons || []).map((r) => {
+      return `<span class="rec-match-chip">${escapeHtml(r)}</span>`;
+    }).join("");
 
     const openBadge = item.is_open_confirmed
       ? `<span class="rec-badge-open">✓ ${escapeHtml(item.open_hours_text || "Verified Open")}</span>`
       : `<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">Hours Unverified</span>`;
 
     const sourceBadge = item.is_mock
-      ? `<span class="rec-badge-mock" title="Sample demo item (API keys not configured)">⚡ Sample / Demo</span>`
-      : `<span class="rec-badge-live" title="Live data verified from ${escapeHtml(item.source || 'API')}">● Live: ${escapeHtml(item.source || 'API')}</span>`;
+      ? `<span class="rec-badge-mock" title="Sample demo item (API keys not configured)">⚡ Sample</span>`
+      : `<span class="rec-badge-live" title="Live data verified from ${escapeHtml(item.source || 'API')}">● Live</span>`;
 
     const eventBadge = item.item_type === "event"
       ? `<span class="rec-badge-event">🎟 ${escapeHtml(item.event_time || "Live Event")}</span>`
@@ -2784,7 +2890,7 @@ function renderRecommendationsList(data) {
       `;
     }).join("");
 
-    // SCRUM-51: Activity Information Drawer HTML
+    // Activity Information Drawer HTML
     const infoDrawerId = `rec-info-drawer-${idx}`;
     const hoursListHtml = (item.weekday_hours && item.weekday_hours.length > 0)
       ? item.weekday_hours.map((h) => `<div>${escapeHtml(h)}</div>`).join("")
@@ -2794,8 +2900,12 @@ function renderRecommendationsList(data) {
       <div id="${infoDrawerId}" class="rec-drawer-box hidden">
         <div class="rec-info-grid">
           <div class="rec-info-row">
-            <span class="rec-info-label">Category & Price</span>
-            <span class="rec-info-val">${escapeHtml(item.category)} (${escapeHtml(item.subcategory)})${priceText}</span>
+            <span class="rec-info-label">Category & Budget</span>
+            <span class="rec-info-val">${escapeHtml(item.category)} (${escapeHtml(item.subcategory)}) • ${escapeHtml(item.price_display || item.price_level || "$$")}</span>
+          </div>
+          <div class="rec-info-row">
+            <span class="rec-info-label">Distance Overview</span>
+            <span class="rec-info-val">${item.avg_distance_miles} mi avg commute (${item.min_member_distance_miles ?? item.avg_distance_miles} mi min / ${item.max_member_distance_miles ?? item.avg_distance_miles} mi max)</span>
           </div>
           <div class="rec-info-row">
             <span class="rec-info-label">Address</span>
@@ -2825,7 +2935,7 @@ function renderRecommendationsList(data) {
       </div>
     `;
 
-    // SCRUM-52: Activity Reviews Drawer HTML
+    // Activity Reviews Drawer HTML
     const reviewsDrawerId = `rec-reviews-drawer-${idx}`;
     const reviewsItemsHtml = reviewsList.length > 0
       ? reviewsList.map((r) => {
@@ -2880,13 +2990,15 @@ function renderRecommendationsList(data) {
           <div>
             <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
               <strong style="font-size: 0.95rem; color: var(--text-main);">${escapeHtml(item.title)}</strong>
+              ${priceBadge}
               ${sourceBadge}
               ${openBadge}
               ${eventBadge}
             </div>
             <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 0.2rem;">
-              <span style="color: #fbbf24; font-weight: 600;">${ratingStars}</span><span style="color: var(--text-muted);">${escapeHtml(reviewCountText)}</span>${priceText} • <span style="color: var(--text-secondary);">${escapeHtml(item.subcategory)}</span>
+              <span style="color: #fbbf24; font-weight: 600;">${ratingStars}</span><span style="color: var(--text-muted);">${escapeHtml(reviewCountText)}</span> • <span style="color: var(--text-secondary);">${escapeHtml(item.subcategory)}</span>
             </div>
+            ${matchReasonsHtml ? `<div style="display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.35rem;">${matchReasonsHtml}</div>` : ""}
           </div>
           <div style="text-align: right; flex-shrink: 0;">
             <span style="font-size: 0.78rem; font-weight: 700; color: var(--accent); display: block;">${item.avg_distance_miles} mi avg</span>
@@ -2900,7 +3012,7 @@ function renderRecommendationsList(data) {
           📍 ${escapeHtml(item.address)}
         </p>
 
-        <!-- SCRUM-51 & SCRUM-52 Action Buttons -->
+        <!-- Activity Action Buttons -->
         <div class="rec-action-bar">
           <button type="button" class="btn-rec-drawer-toggle" onclick="toggleRecDrawer('${infoDrawerId}', this)">
             ℹ️ Activity Info

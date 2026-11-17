@@ -1125,12 +1125,16 @@ async def delete_poll_option(
 @app.get(
     "/api/groups/{group_id}/hangouts/{poll_id}/recommendations",
     response_model=PollRecommendationsResponse,
-    summary="Get food or entertainment recommendations for a poll based on members' locations and max distance",
+    summary="Get food or entertainment recommendations for a poll based on members' locations, max distance, and budget",
 )
 async def get_hangout_recommendations(
     group_id: int,
     poll_id: int,
     category: str = Query("food", pattern="^(food|entertainment)$"),
+    budget: Optional[str] = Query(None, description="Budget filter: all, $, $$, $$$, $$$$"),
+    max_distance: Optional[float] = Query(None, ge=1, le=500, description="Max travel distance in miles"),
+    within_limits_only: bool = Query(False, description="Filter only to venues within all members' limits"),
+    sort_by: Optional[str] = Query("recommended", pattern="^(recommended|distance|rating|budget)$", description="Sort by recommended, distance, rating, or budget"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1198,6 +1202,10 @@ async def get_hangout_recommendations(
         slot_start=poll.start_time,
         slot_end=poll.end_time,
         members_with_coords=members_with_coords,
+        budget=budget,
+        max_distance=max_distance,
+        within_limits_only=within_limits_only,
+        sort_by=sort_by or "recommended",
     )
 
     return PollRecommendationsResponse(**recommendations_data)

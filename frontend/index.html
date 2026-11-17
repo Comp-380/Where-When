@@ -749,6 +749,115 @@
       align-items: center;
       justify-content: center;
     }
+    /* Activity Budget & Distance Filter Controls */
+    .rec-filter-controls {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 0.65rem 0.8rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+    .rec-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .rec-filter-label {
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      min-width: 65px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .rec-filter-pills {
+      display: flex;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+    .rec-pill-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      border-radius: 999px;
+      padding: 0.22rem 0.65rem;
+      font-size: 0.73rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .rec-pill-btn:hover {
+      background: rgba(255, 255, 255, 0.09);
+      color: var(--text-main);
+    }
+    .rec-pill-btn.active {
+      background: rgba(99, 102, 241, 0.25);
+      border-color: #6366f1;
+      color: #a5b4fc;
+      box-shadow: 0 0 8px rgba(99, 102, 241, 0.25);
+    }
+    .rec-select-filter {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      border-radius: var(--radius-sm);
+      padding: 0.25rem 0.5rem;
+      font-size: 0.74rem;
+      cursor: pointer;
+    }
+    .rec-select-filter:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .rec-price-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.12rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .rec-price-badge.free {
+      background: rgba(16, 185, 129, 0.18);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+    .rec-price-badge.tier-1 {
+      background: rgba(52, 211, 153, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(52, 211, 153, 0.3);
+    }
+    .rec-price-badge.tier-2 {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    .rec-price-badge.tier-3 {
+      background: rgba(168, 85, 247, 0.15);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+    .rec-price-badge.tier-4 {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .rec-match-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      padding: 0.12rem 0.4rem;
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
   </style>
 </head>
 <body>
@@ -1721,6 +1830,45 @@
           <button type="button" id="rec-tab-entertainment" class="rec-tab-btn" onclick="switchRecTab('entertainment')">
             🎟️ Entertainment & Events
           </button>
+        </div>
+
+        <!-- Activity Budget & Distance Filters -->
+        <div class="rec-filter-controls">
+          <div class="rec-filter-row">
+            <span class="rec-filter-label">Budget:</span>
+            <div class="rec-filter-pills" id="rec-budget-pills">
+              <button type="button" class="rec-pill-btn active" data-budget="all" onclick="setRecBudgetFilter('all', this)">All</button>
+              <button type="button" class="rec-pill-btn" data-budget="$" onclick="setRecBudgetFilter('$', this)">💵 $ Under $15</button>
+              <button type="button" class="rec-pill-btn" data-budget="$$" onclick="setRecBudgetFilter('$$', this)">💳 $$ $15–$35</button>
+              <button type="button" class="rec-pill-btn" data-budget="$$$" onclick="setRecBudgetFilter('$$$', this)">💎 $$$+ $35+</button>
+            </div>
+          </div>
+          <div class="rec-filter-row" style="justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;">
+              <span class="rec-filter-label">Distance:</span>
+              <select id="rec-distance-filter" class="rec-select-filter" onchange="applyRecFilterChange()">
+                <option value="">Any Distance</option>
+                <option value="5">Within 5 miles</option>
+                <option value="10">Within 10 miles</option>
+                <option value="15">Within 15 miles</option>
+                <option value="25">Within 25 miles</option>
+                <option value="50">Within 50 miles</option>
+              </select>
+              <label style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; color: var(--text-secondary); cursor: pointer; user-select: none;">
+                <input type="checkbox" id="rec-within-limits-check" onchange="applyRecFilterChange()" />
+                In All Limits
+              </label>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.45rem;">
+              <span class="rec-filter-label" style="min-width: auto;">Sort:</span>
+              <select id="rec-sort-filter" class="rec-select-filter" onchange="applyRecFilterChange()">
+                <option value="recommended">Best Match</option>
+                <option value="distance">Closest First</option>
+                <option value="rating">Highest Rated</option>
+                <option value="budget">Lowest Price</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <!-- Hours verification badge info -->
